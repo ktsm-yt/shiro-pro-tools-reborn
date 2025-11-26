@@ -43,3 +43,16 @@ export interface Character {
 export interface Formation {
     slots: (Character | null)[]; // 8枠
 }
+
+export interface CharacterBuffResult {
+    // 各ステータスの最終適用値
+    stats: Record<Stat, number>;
+    // 適用されたバフの詳細（デバッグ/UI表示用）
+    activeBuffs: Buff[];
+}
+
+/**
+ * バフ計算結果の型
+ * キャラクターIDをキーとし、各ステータスの計算結果を保持する
+ */
+export type BuffMatrixResult = Record<string, CharacterBuffResult>;
