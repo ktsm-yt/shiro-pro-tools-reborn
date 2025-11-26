@@ -1,15 +1,9 @@
-/**
- * Wiki解析の中間データ型定義
- */
-
-/**
- * WikiのHTMLから抽出した生データ
- * まだバフ解析前の状態
- */
 export interface RawCharacterData {
     name: string;
+    url: string;
+    imageUrl?: string;
     weapon: string;
-    attributes: string[]; // 平、水、山など
+    attributes: string[];
     baseStats: {
         attack?: number;
         defense?: number;
@@ -17,14 +11,12 @@ export interface RawCharacterData {
         cooldown?: number;
         cost?: number;
     };
-    skillTexts: string[]; // 特技の説明文（そのまま）
-    strategyTexts: string[]; // 計略の説明文（そのまま）
+    skillTexts: string[];
+    strategyTexts: string[];
 }
 
-/**
- * Wiki解析のエラー情報
- */
-export interface WikiParseError {
-    message: string;
-    url?: string;
+export interface WikiFetchResult {
+    success: boolean;
+    data?: string; // HTML content
+    error?: string;
 }

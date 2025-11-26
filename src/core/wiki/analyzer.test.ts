@@ -119,6 +119,7 @@ describe('analyzeCharacter', () => {
     it('should convert RawCharacterData to Character', () => {
         const rawData: RawCharacterData = {
             name: '江戸城',
+            url: 'http://example.com',
             weapon: '刀',
             attributes: ['平'],
             baseStats: {
@@ -147,6 +148,7 @@ describe('analyzeCharacter', () => {
     it('should handle multiple skills', () => {
         const rawData: RawCharacterData = {
             name: 'テストキャラ',
+            url: 'http://example.com',
             weapon: '槍',
             attributes: ['水'],
             baseStats: {},
