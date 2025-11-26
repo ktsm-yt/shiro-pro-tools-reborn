@@ -22,11 +22,9 @@ export interface RawCharacterData {
 }
 
 /**
- * Wiki解析のエラー型
+ * Wiki解析のエラー情報
  */
-export class WikiParseError extends Error {
-    constructor(message: string, public readonly url?: string) {
-        super(message);
-        this.name = 'WikiParseError';
-    }
+export interface WikiParseError {
+    message: string;
+    url?: string;
 }
