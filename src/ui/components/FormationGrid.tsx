@@ -1,20 +1,19 @@
 import React from 'react';
-import type { Formation } from '../../core/types';
+import type { Formation, Character } from '../../core/types';
 
 interface Props {
     formation: Formation;
+    onCharacterClick?: (char: Character) => void;
 }
 
-export const FormationGrid: React.FC<Props> = ({ formation }) => {
+export const FormationGrid: React.FC<Props> = ({ formation, onCharacterClick }) => {
     return (
-        <div className="grid grid-cols-8 gap-2 mb-8">
-            {formation.slots.map((char, index) => (
+        <div className="grid grid-cols-8 gap-2">
+            {formation.slots.map((char, i) => (
                 <div
-                    key={index}
-                    className={`
-            h-16 border-2 rounded-lg flex flex-col items-center justify-center px-1
-            ${char ? 'border-slate-400 bg-white' : 'border-slate-200 bg-slate-50 border-dashed'}
-          `}
+                    key={i}
+                    className="relative bg-slate-100 rounded-lg border-2 border-dashed border-slate-300 h-16 flex items-center justify-center overflow-hidden hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer group"
+                    onClick={() => char && onCharacterClick?.(char)}
                 >
                     {char ? (
                         <>

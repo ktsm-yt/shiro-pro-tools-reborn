@@ -1,59 +1,46 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { FormationGrid } from './ui/components/FormationGrid';
 import { BuffMatrix } from './ui/components/BuffMatrix';
-import { WikiImport } from './ui/components/WikiImport';
-import { MOCK_CHARS } from './core/mock/data';
-import { calcBuffMatrix } from './core/logic/buffs';
-import type { Formation, Character } from './core/types';
+import { AttackerAnalysisModal } from './ui/components/AttackerAnalysisModal';
+import { MOCK_FORMATION, MOCK_BUFF_MATRIX } from './core/mock/data';
+import type { Character } from './core/types';
 
 function App() {
-  // Formation State
-  const [formation, setFormation] = useState<Formation>({
-    slots: [
-      MOCK_CHARS[0], // 江戸
-      MOCK_CHARS[1], // 彦根
-      MOCK_CHARS[2], // 大阪
-      null, null, null, null, null
-    ]
-  });
+  // 選択されたキャラクター（分析用）
+  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
 
-  const buffMatrix = useMemo(() => calcBuffMatrix(formation), [formation]);
-
-  const handleImportCharacter = (char: Character) => {
-    // 空いているスロットを探して追加
-    const emptyIndex = formation.slots.findIndex(slot => slot === null);
-    if (emptyIndex !== -1) {
-      const newSlots = [...formation.slots];
-      newSlots[emptyIndex] = char;
-      setFormation({ slots: newSlots });
-    } else {
-      alert('編成枠がいっぱいです');
-    }
+  const handleCharacterClick = (char: Character) => {
+    setSelectedCharacter(char);
+    setIsAnalysisModalOpen(true);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 p-8">
-      <header className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">ShiroPro Tools (Reborn)</h1>
-          <p className="text-slate-600">Phase 2: Wiki Import Integration</p>
-        </div>
-        <div className="w-96">
-          <WikiImport onImport={handleImportCharacter} />
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50 p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <header>
+          <h1 className="text-3xl font-bold text-slate-800">ShiroPro Tools (Reborn)</h1>
+          <p className="text-slate-600">御城プロジェクト:RE 統合計算ツール</p>
+        </header>
 
-      <main className="max-w-6xl mx-auto">
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-4 border-l-4 border-blue-500 pl-3">編成 (Formation)</h2>
-          <FormationGrid formation={formation} />
+        <section className="bg-white p-6 rounded-xl shadow-sm">
+          <h2 className="text-xl font-bold mb-4 text-slate-700">編成 & バフ・マトリックス</h2>
+          <div className="space-y-6">
+            <FormationGrid
+              formation={MOCK_FORMATION}
+              onCharacterClick={handleCharacterClick}
+            />
+            <BuffMatrix formation={MOCK_FORMATION} matrix={MOCK_BUFF_MATRIX} />
+          </div>
         </section>
+      </div>
 
-        <section>
-          <h2 className="text-xl font-bold mb-4 border-l-4 border-blue-500 pl-3">バフ・マトリックス (Buff Matrix)</h2>
-          <BuffMatrix formation={formation} matrix={buffMatrix} />
-        </section>
-      </main>
+      <AttackerAnalysisModal
+        isOpen={isAnalysisModalOpen}
+        onClose={() => setIsAnalysisModalOpen(false)}
+        character={selectedCharacter}
+        analysisData={selectedCharacter ? MOCK_BUFF_MATRIX[selectedCharacter.id] : undefined}
+      />
     </div>
   );
 }

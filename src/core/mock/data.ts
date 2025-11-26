@@ -1,4 +1,5 @@
-import type { Character, Buff } from '../types';
+import type { Character, Buff, Formation } from '../types';
+import { calcBuffMatrix } from '../logic/buffs';
 
 const createBuff = (
     id: string,
@@ -76,3 +77,14 @@ export const MOCK_CHARS: Character[] = [
         strategies: [],
     },
 ];
+
+export const MOCK_FORMATION: Formation = {
+    slots: [
+        MOCK_CHARS[0],
+        MOCK_CHARS[1],
+        MOCK_CHARS[2],
+        null, null, null, null, null
+    ]
+};
+
+export const MOCK_BUFF_MATRIX = calcBuffMatrix(MOCK_FORMATION);
