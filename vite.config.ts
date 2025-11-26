@@ -9,4 +9,14 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
   },
+  server: {
+    proxy: {
+      // Wiki取得用プロキシ（CORS回避）
+      '/api/wiki': {
+        target: 'https://scre.swiki.jp',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/wiki/, ''),
+      },
+    },
+  },
 })

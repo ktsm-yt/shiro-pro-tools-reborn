@@ -31,10 +31,70 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         url,
         weapon,
         attributes,
-        baseStats: {}, // TODO: ステータス抽出ロジックの実装
+        baseStats: extractBaseStats(doc),
         skillTexts,
         strategyTexts,
     };
+}
+
+function extractBaseStats(doc: Document): Record<string, number> {
+    const stats: Record<string, number> = {
+        hp: 0,
+        attack: 0,
+        defense: 0,
+        range: 0,
+        recovery: 0, // 回復
+    };
+
+    // ステータスが含まれる可能性のあるテーブルセルを探す
+    // 一般的なWikiの構造: <th>耐久</th><td>1234</td>...
+    const ths = Array.from(doc.querySelectorAll('th'));
+
+    const statMap: Record<string, string> = {
+        '耐久': 'hp',
+        '攻撃': 'attack',
+        '防御': 'defense',
+        '射程': 'range',
+        '回復': 'recovery',
+    };
+
+    ths.forEach(th => {
+        const headerText = th.textContent?.trim() || '';
+
+        // ヘッダーがステータス名のいずれかを含むかチェック
+        for (const [key, statKey] of Object.entries(statMap)) {
+            if (headerText === key || headerText.startsWith(key)) {
+                // 対応する値セルを探す
+                // パターン1: 隣のtd (<tr><th>耐久</th><td>1000</td></tr>)
+                let targetTd = th.nextElementSibling as HTMLElement;
+
+                // パターン2: 同じインデックスの行違い (縦持ちテーブルの場合)
+                // これは複雑なので一旦パターン1のみ対応
+
+                if (targetTd && targetTd.tagName === 'TD') {
+                    // 数値を抽出
+                    const valueText = targetTd.textContent?.trim() || '';
+                    // "1234" や "1234(2468)" のような形式から最初の数値を抽出
+                    const match = valueText.match(/(\d+)/);
+                    if (match) {
+                        const value = parseInt(match[1], 10);
+                        // 既に値が入っている場合は上書きしない（最初の出現を優先）
+                        // ただし、値が極端に小さい（レベル1）か大きい（最大レベル）かの判断は難しい
+                        // ここでは単純に最初の有効な値を採用
+                        if (stats[statKey] === 0) {
+                            stats[statKey] = value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // 射程が見つからない場合、武器種から推測するロジックも考えられるが、
+    // extractWeaponで取得した武器種を使って補完するのは呼び出し元の責任とするか、
+    // ここで簡易的に補完するか。一旦抽出のみに専念。
+
+    return stats;
 }
 
 function extractWeapon(doc: Document): string {

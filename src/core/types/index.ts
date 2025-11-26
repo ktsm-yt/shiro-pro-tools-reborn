@@ -1,4 +1,5 @@
 export type Stat =
+    | 'hp'
     | 'attack'
     | 'defense'
     | 'range'

@@ -5,9 +5,11 @@ export interface RawCharacterData {
     weapon: string;
     attributes: string[];
     baseStats: {
+        hp?: number;
         attack?: number;
         defense?: number;
         range?: number;
+        recovery?: number;
         cooldown?: number;
         cost?: number;
     };
