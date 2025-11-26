@@ -8,6 +8,11 @@ let buffIdCounter = 0;
  * @param text バフの説明文（例: "攻撃力+30%"）
  * @returns 解析されたBuff配列
  */
+/**
+ * バフテキストを解析してBuff配列に変換する
+ * @param text バフの説明文（例: "攻撃力+30%"）
+ * @returns 解析されたBuff配列
+ */
 export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isActive'>[] {
     const buffs: Omit<Buff, 'id' | 'source' | 'isActive'>[] = [];
 
@@ -19,60 +24,104 @@ export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isA
     let target: 'self' | 'range' | 'all' = 'self';
     if (text.includes('範囲内')) {
         target = 'range';
-    } else if (text.includes('全体') || text.includes('味方全員')) {
+    } else if (text.includes('全体') || text.includes('味方全員') || text.includes('殿')) {
         target = 'all';
     }
 
-    // ステータス名のマッピング
-    const statMap: Record<string, Buff['stat']> = {
-        '攻撃力': 'attack',
-        '防御力': 'defense',
-        '射程': 'range',
-        '再配置': 'cooldown',
-        'コスト': 'cost',
-        '与ダメージ': 'damage_dealt',
-        '被ダメージ': 'damage_taken',
+    // 解析済み箇所を追跡して重複マッチを防ぐ
+    const matchedRanges: { start: number; end: number }[] = [];
+    const isOverlapping = (start: number, end: number) => {
+        return matchedRanges.some(r =>
+            (start >= r.start && start < r.end) ||
+            (end > r.start && end <= r.end) ||
+            (start <= r.start && end >= r.end)
+        );
     };
 
-    // パーセントバフを検出した位置を記録（重複回避用）
-    const percentMatchedIndices = new Set<number>();
+    // バフ定義（優先度順：具体的なものから先に）
+    const definitions: {
+        pattern: RegExp;
+        stat: Buff['stat'];
+        mode: Buff['mode'];
+        valueIndex: number; // 正規表現のキャプチャグループ番号
+        isNegative?: boolean; // 値を負にするか（デバフなど）
+    }[] = [
+            // --- 攻撃系 ---
+            // 攻撃割合
+            { pattern: /攻撃(?:力)?(?:が|を)?(\d+)%(?:上昇|増加|アップ)/, stat: 'attack', mode: 'percent_max', valueIndex: 1 },
+            { pattern: /攻撃(?:力)?\+(\d+)%/, stat: 'attack', mode: 'percent_max', valueIndex: 1 },
+            { pattern: /攻撃(?:力)?(?:が|を)?(\d+(?:\.\d+)?)倍/, stat: 'attack', mode: 'percent_max', valueIndex: 1 }, // 倍率は別途処理が必要だが一旦percent_maxで扱う（値の変換が必要）
+            // 攻撃固定
+            { pattern: /攻撃(?:力)?(?:が|を)?(\d+)(?!%)(?:上昇|増加|アップ)/, stat: 'attack', mode: 'flat_sum', valueIndex: 1 },
+            { pattern: /攻撃(?:力)?\+(\d+)(?!%)/, stat: 'attack', mode: 'flat_sum', valueIndex: 1 },
 
-    // パーセントバフのパターン: "攻撃力+30%"
-    const percentPattern = /(攻撃力|防御力|射程|再配置|コスト|与ダメージ|被ダメージ)\+(\d+)%/g;
-    let match;
-    while ((match = percentPattern.exec(text)) !== null) {
-        percentMatchedIndices.add(match.index);
-        const statName = match[1];
-        const value = parseInt(match[2], 10);
-        const stat = statMap[statName];
-        if (stat) {
+            // --- 防御系 ---
+            // 防御割合
+            { pattern: /防御(?:力)?(?:が|を)?(\d+)%(?:上昇|増加|アップ)/, stat: 'defense', mode: 'percent_max', valueIndex: 1 },
+            { pattern: /防御(?:力)?\+(\d+)%/, stat: 'defense', mode: 'percent_max', valueIndex: 1 },
+            { pattern: /防御(?:力)?(?:が|を)?(\d+(?:\.\d+)?)倍/, stat: 'defense', mode: 'percent_max', valueIndex: 1 },
+            // 防御固定
+            { pattern: /防御(?:力)?(?:が|を)?(\d+)(?!%)(?:上昇|増加|アップ)/, stat: 'defense', mode: 'flat_sum', valueIndex: 1 },
+            { pattern: /防御(?:力)?\+(\d+)(?!%)/, stat: 'defense', mode: 'flat_sum', valueIndex: 1 },
+            // 防御デバフ
+            { pattern: /(?:敵の?)?防御(?:力)?(?:が|を)?(\d+)%(?:低下|減少|ダウン)/, stat: 'defense', mode: 'percent_max', valueIndex: 1, isNegative: true },
+            { pattern: /(?:敵の?)?防御(?:力)?(?:が|を)?(\d+)(?!%)(?:低下|減少|ダウン)/, stat: 'defense', mode: 'flat_sum', valueIndex: 1, isNegative: true },
+
+            // --- 射程系 ---
+            // 射程割合
+            { pattern: /射程(?:が|を)?(\d+)%(?:上昇|増加|アップ)/, stat: 'range', mode: 'percent_max', valueIndex: 1 },
+            { pattern: /射程\+(\d+)%/, stat: 'range', mode: 'percent_max', valueIndex: 1 },
+            // 射程固定
+            { pattern: /射程(?:が|を)?(\d+)(?!%)(?:上昇|増加|アップ)/, stat: 'range', mode: 'flat_sum', valueIndex: 1 },
+            { pattern: /射程\+(\d+)(?!%)/, stat: 'range', mode: 'flat_sum', valueIndex: 1 },
+
+            // --- ダメージ系 ---
+            // 与ダメージ
+            { pattern: /与える?ダメージ(?:が|を)?(\d+)%(?:上昇|増加|アップ)/, stat: 'damage_dealt', mode: 'percent_max', valueIndex: 1 },
+            { pattern: /与ダメ(?:ージ)?(?:が|を)?(\d+)%(?:上昇|増加|アップ)/, stat: 'damage_dealt', mode: 'percent_max', valueIndex: 1 },
+            { pattern: /与ダメ(?:ージ)?\+(\d+)%/, stat: 'damage_dealt', mode: 'percent_max', valueIndex: 1 },
+            // 被ダメージ軽減
+            { pattern: /(?:受ける?|被)ダメージ(?:が|を)?(\d+)%(?:低下|減少|軽減|ダウン)/, stat: 'damage_taken', mode: 'percent_max', valueIndex: 1, isNegative: true },
+
+            // --- その他 ---
+            // コスト
+            { pattern: /気(?:トークン)?(?:が|を)?(\d+)(?:低下|減少|軽減|ダウン)/, stat: 'cost', mode: 'flat_sum', valueIndex: 1, isNegative: true },
+            // 再配置
+            { pattern: /(?:再配置|復帰)(?:時間)?(?:が|を)?(\d+)%(?:短縮|減少|軽減)/, stat: 'cooldown', mode: 'percent_max', valueIndex: 1, isNegative: true },
+            { pattern: /(?:再配置|復帰)(?:時間)?\+(\d+)%/, stat: 'cooldown', mode: 'percent_max', valueIndex: 1, isNegative: true },
+        ];
+
+    for (const def of definitions) {
+        // グローバル検索のために 'g' フラグを追加した新しいRegExpを作成
+        const regex = new RegExp(def.pattern, 'g');
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+
+            if (isOverlapping(start, end)) {
+                continue;
+            }
+
+            let value = parseFloat(match[def.valueIndex]);
+
+            // 倍率表記（1.5倍など）の場合はパーセントに変換（+50%）
+            if (match[0].includes('倍')) {
+                value = (value - 1) * 100;
+            }
+
+            if (def.isNegative) {
+                value = -value;
+            }
+
             buffs.push({
-                stat,
-                mode: 'percent_max',
+                stat: def.stat,
+                mode: def.mode,
                 value,
                 target,
             });
-        }
-    }
 
-    // 固定値バフのパターン: "攻撃力+50"（%がない）
-    const flatPattern = /(攻撃力|防御力|射程|再配置|コスト)\+(\d+)/g;
-    while ((match = flatPattern.exec(text)) !== null) {
-        // パーセントバフとして既に処理済みの位置はスキップ
-        if (percentMatchedIndices.has(match.index)) {
-            continue;
-        }
-
-        const statName = match[1];
-        const value = parseInt(match[2], 10);
-        const stat = statMap[statName];
-        if (stat) {
-            buffs.push({
-                stat,
-                mode: 'flat_sum',
-                value,
-                target,
-            });
+            matchedRanges.push({ start, end });
         }
     }
 

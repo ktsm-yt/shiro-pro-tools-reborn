@@ -22,6 +22,15 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
                 damage_taken: 0,
             },
             activeBuffs: [],
+            breakdown: {
+                attack: { base: char.baseStats.attack, selfBuff: 0, allyBuff: 0 },
+                defense: { base: char.baseStats.defense, selfBuff: 0, allyBuff: 0 },
+                range: { base: char.baseStats.range, selfBuff: 0, allyBuff: 0 },
+                cooldown: { base: char.baseStats.cooldown, selfBuff: 0, allyBuff: 0 },
+                cost: { base: char.baseStats.cost, selfBuff: 0, allyBuff: 0 },
+                damage_dealt: { base: char.baseStats.damage_dealt, selfBuff: 0, allyBuff: 0 },
+                damage_taken: { base: char.baseStats.damage_taken, selfBuff: 0, allyBuff: 0 },
+            }
         };
     });
 
@@ -40,7 +49,8 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
                 if (!targetChar) return;
 
                 if (isBuffApplicable(buff, sourceChar, targetChar)) {
-                    applyBuffToResult(result[targetChar.id], buff);
+                    const isSelfBuff = sourceChar.id === targetChar.id;
+                    applyBuffToResult(result[targetChar.id], buff, isSelfBuff);
                 }
             });
         });
@@ -49,19 +59,31 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
     return result;
 }
 
-function applyBuffToResult(result: CharacterBuffResult, buff: Buff) {
+function applyBuffToResult(result: CharacterBuffResult, buff: Buff, isSelfBuff: boolean) {
     const currentVal = result.stats[buff.stat];
+    const breakdown = result.breakdown![buff.stat]!;
 
     if (buff.mode === 'percent_max') {
         // 最大値適用
         if (buff.value > currentVal) {
             result.stats[buff.stat] = buff.value;
-            // 既存の同種バフを削除して入れ替え（厳密には履歴を残すべきだが一旦シンプルに）
-            // TODO: UI表示用に「上書きされたバフ」も残すか検討
+
+            // 最大値更新時、内訳も更新（上書き）
+            // 注意: percent_maxの場合、"最も高い効果"のみが有効になるため、
+            // それが自己バフなら自己バフ分、味方バフなら味方バフ分として計上する
+            breakdown.selfBuff = isSelfBuff ? buff.value : 0;
+            breakdown.allyBuff = isSelfBuff ? 0 : buff.value;
         }
     } else if (buff.mode === 'flat_sum') {
         // 加算
         result.stats[buff.stat] += buff.value;
+
+        // 加算の場合は単純に積み上げ
+        if (isSelfBuff) {
+            breakdown.selfBuff += buff.value;
+        } else {
+            breakdown.allyBuff += buff.value;
+        }
     }
 
     result.activeBuffs.push(buff);

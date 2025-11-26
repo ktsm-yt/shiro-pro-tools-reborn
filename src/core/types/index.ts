@@ -48,7 +48,16 @@ export interface CharacterBuffResult {
     // 各ステータスの最終適用値
     stats: Record<Stat, number>;
     // 適用されたバフの詳細（デバッグ/UI表示用）
+    // 適用されたバフの詳細（デバッグ/UI表示用）
     activeBuffs: Buff[];
+    // バフの内訳
+    breakdown?: {
+        [key in Stat]?: {
+            base: number;
+            selfBuff: number;
+            allyBuff: number;
+        };
+    };
 }
 
 /**
@@ -56,3 +65,32 @@ export interface CharacterBuffResult {
  * キャラクターIDをキーとし、各ステータスの計算結果を保持する
  */
 export type BuffMatrixResult = Record<string, CharacterBuffResult>;
+
+export interface DamageCalculationResult {
+    finalAttack: number;      // 最終攻撃力
+    damagePerHit: number;     // 1ヒットあたりのダメージ
+    totalDamage: number;      // 合計ダメージ
+    effectiveDefense: number; // 敵の有効防御力
+    receivedDamageMultiplier: number; // 被ダメージ倍率
+
+    // 計算の内訳（UI表示用）
+    breakdown: {
+        baseAttack: number;
+        attackFlat: number;
+        attackPercent: number;
+        attackMultipliers: number[];
+        damagePercent: number;
+        damageMultipliers: number[];
+        enemyDefenseDebuffFlat: number;
+        enemyDefenseDebuffPercent: number;
+        ignoreDefense: boolean;
+    };
+}
+
+export interface DamageCalculationContext {
+    enemyDefense: number;
+    enemyHpPercent: number;
+    allyHpPercent: number;
+    hitCount: number;
+    isStrategyActive: boolean;
+}

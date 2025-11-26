@@ -113,6 +113,57 @@ describe('analyzeBuffText', () => {
             expect(result).toHaveLength(0);
         });
     });
+    describe('新しいバフパターン', () => {
+        it('should parse "攻撃が1.5倍" correctly', () => {
+            const result = analyzeBuffText('攻撃が1.5倍');
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                stat: 'attack',
+                mode: 'percent_max',
+                value: 50, // (1.5 - 1) * 100
+            });
+        });
+
+        it('should parse "敵の防御が20%低下" correctly', () => {
+            const result = analyzeBuffText('敵の防御が20%低下');
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                stat: 'defense',
+                mode: 'percent_max',
+                value: -20,
+            });
+        });
+
+        it('should parse "与ダメージが30%上昇" correctly', () => {
+            const result = analyzeBuffText('与ダメージが30%上昇');
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                stat: 'damage_dealt',
+                mode: 'percent_max',
+                value: 30,
+            });
+        });
+
+        it('should parse "被ダメージを25%軽減" correctly', () => {
+            const result = analyzeBuffText('被ダメージを25%軽減');
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                stat: 'damage_taken',
+                mode: 'percent_max',
+                value: -25,
+            });
+        });
+
+        it('should parse "射程+20" correctly', () => {
+            const result = analyzeBuffText('射程+20');
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                stat: 'range',
+                mode: 'flat_sum',
+                value: 20,
+            });
+        });
+    });
 });
 
 describe('analyzeCharacter', () => {
