@@ -76,4 +76,40 @@ describe('parseWikiHtml', () => {
     expect(result.baseStats.hp).toBe(1000);
     expect(result.baseStats.attack).toBe(250);
   });
+
+  it('should extract attributes from images (alt text)', () => {
+    const mockHtml = `
+      <html>
+        <head><title>テストキャラ - Wiki</title></head>
+        <body>
+          <table>
+            <tr><th>城属性</th><td><img alt="平山.png" src="hirayama.png"></td></tr>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const result = parseWikiHtml(mockHtml, 'http://example.com');
+    expect(result.attributes).toContain('平山');
+  });
+
+  it('should extract skills and strategies with complex headers', () => {
+    const mockHtml = `
+      <html>
+        <head><title>テストキャラ - Wiki</title></head>
+        <body>
+          <table>
+            <tr><th>[無印]特技</th><td>攻撃強化</td><td>自身の攻撃が20%上昇</td></tr>
+            <tr><th>[改壱]特技</th><td>真・攻撃強化</td><td>自身の攻撃が30%上昇</td></tr>
+            <tr><th>[無印]計略</th><td>気:10 秒:40</td><td>火計</td><td>範囲内の敵にダメージ</td></tr>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const result = parseWikiHtml(mockHtml, 'http://example.com');
+    expect(result.skillTexts).toContain('自身の攻撃が20%上昇');
+    expect(result.skillTexts).toContain('自身の攻撃が30%上昇');
+    expect(result.strategyTexts).toContain('範囲内の敵にダメージ');
+  });
 });
