@@ -1,28 +1,17 @@
 import type { Buff } from '../types';
 import type { ParsedBuff } from './buffParser';
-import { typeToStatMap, targetMap } from './patterns';
 
 let buffIdSeq = 0;
 
 export function convertToRebornBuff(parsed: ParsedBuff): Omit<Buff, 'id' | 'source' | 'isActive'> {
-  const stat = typeToStatMap[parsed.type];
-  const mode: Buff['mode'] = parsed.unit === '+%' ? 'percent_max' : 'flat_sum';
-  const target = targetMap[parsed.target] ?? 'self';
-  let value = parsed.value;
-
-  // 被ダメ軽減や再攻撃短縮はマイナス方向として扱う
-  if (parsed.type === '被ダメ割合') value = -value;
-  if (parsed.type === '攻撃速度割合') value = -value;
-  if (parsed.type === '射程固定' && parsed.value === 1) {
-    // 誤爆で +1 が拾われるケースをフィルタ
-    value = parsed.value;
-  }
-
   return {
-    stat,
-    mode,
-    value,
-    target,
+    stat: parsed.stat as Buff['stat'],
+    mode: parsed.mode as Buff['mode'],
+    value: parsed.value,
+    target: parsed.target as Buff['target'],
+    costType: parsed.costType as Buff['costType'],
+    inspireSourceStat: parsed.inspireSourceStat,
+    isDuplicate: parsed.isDuplicate,
   };
 }
 

@@ -14,7 +14,7 @@ export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isA
     }
     const uniq = new Map<string, Omit<Buff, 'id' | 'source' | 'isActive'>>();
     parsed.map(convertToRebornBuff).forEach(b => {
-        const key = `${b.stat}-${b.mode}-${b.value}-${b.target}`;
+        const key = `${b.stat}-${b.mode}-${b.value}-${b.target}-${b.costType ?? ''}-${b.inspireSourceStat ?? ''}`;
         if (!uniq.has(key)) uniq.set(key, b);
     });
     return Array.from(uniq.values());

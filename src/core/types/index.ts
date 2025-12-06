@@ -15,9 +15,20 @@ export type Stat =
     | 'target_count' // 対象数
     | 'ki_gain'      // 気増加
     | 'damage_drain' // 与ダメ回復
-    | 'ignore_defense'; // 防御無視
+    | 'ignore_defense' // 防御無視
+    | 'enemy_attack'
+    | 'enemy_defense'
+    | 'enemy_defense_ignore_complete'
+    | 'enemy_defense_ignore_percent'
+    | 'enemy_movement'
+    | 'enemy_knockback'
+    | 'strategy_cooldown'
+    | 'damage_recovery'
+    | 'give_damage'
+    | 'inspire'
+    | 'attack_count';
 
-export type BuffMode = 'percent_max' | 'flat_sum'; // 最大値適用 or 合算
+export type BuffMode = 'percent_max' | 'flat_sum' | 'percent_reduction'; // percent_reductionは短縮系
 
 export type ConditionTag =
     | 'melee'
@@ -38,6 +49,9 @@ export interface Buff {
     target: 'self' | 'range' | 'all';
     conditionTags?: ConditionTag[]; // 条件タグ
     isActive: boolean;
+    costType?: 'natural' | 'enemy_defeat' | 'ally_defeat' | 'gradual' | 'giant_cost' | 'strategy_cost';
+    inspireSourceStat?: 'attack' | 'defense';
+    isDuplicate?: boolean; // 効果重複可
 }
 
 export interface Character {
