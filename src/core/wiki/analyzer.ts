@@ -28,7 +28,7 @@ export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isA
 export function analyzeCharacter(rawData: RawCharacterData): Character {
     const skills: Buff[] = [];
     const strategies: Buff[] = [];
-
+    const specials: Buff[] = [];
     // 特技テキストを解析
     for (const skillText of rawData.skillTexts) {
         const buffTemplates = analyzeBuffText(skillText);
@@ -55,6 +55,21 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
         }
     }
 
+    // 特殊能力テキストを解析
+    if (rawData.specialTexts) {
+        for (const specialText of rawData.specialTexts) {
+            const buffTemplates = analyzeBuffText(specialText);
+            for (const template of buffTemplates) {
+                specials.push({
+                    id: `buff_${buffIdCounter++}`,
+                    ...template,
+                    source: 'special_ability',
+                    isActive: false,
+                });
+            }
+        }
+    }
+
     return {
         id: `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: rawData.name,
@@ -65,17 +80,29 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
         placement: rawData.placement,
         attributes: rawData.attributes,
         baseStats: {
+            hp: rawData.baseStats.hp ?? 0,
             attack: rawData.baseStats.attack ?? 0,
             defense: rawData.baseStats.defense ?? 0,
             range: rawData.baseStats.range ?? 0,
+            recovery: rawData.baseStats.recovery ?? 0,
             cooldown: rawData.baseStats.cooldown ?? 0,
             cost: rawData.baseStats.cost ?? 0,
             damage_dealt: rawData.baseStats.damage_dealt ?? 0,
             damage_taken: rawData.baseStats.damage_taken ?? 0,
+            attack_speed: rawData.baseStats.attack_speed ?? 0,
+            attack_gap: rawData.baseStats.attack_gap ?? 0,
+            movement_speed: rawData.baseStats.movement_speed ?? 0,
+            knockback: rawData.baseStats.knockback ?? 0,
+            target_count: rawData.baseStats.target_count ?? 0,
+            ki_gain: rawData.baseStats.ki_gain ?? 0,
+            damage_drain: rawData.baseStats.damage_drain ?? 0,
+            ignore_defense: rawData.baseStats.ignore_defense ?? 0,
         },
         skills,
         strategies,
+        specialAbilities: specials,
         rawSkillTexts: rawData.skillTexts,
         rawStrategyTexts: rawData.strategyTexts,
+        rawSpecialTexts: rawData.specialTexts,
     };
 }

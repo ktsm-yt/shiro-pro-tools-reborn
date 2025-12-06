@@ -13,6 +13,10 @@ export function convertToRebornBuff(parsed: ParsedBuff): Omit<Buff, 'id' | 'sour
   // 被ダメ軽減や再攻撃短縮はマイナス方向として扱う
   if (parsed.type === '被ダメ割合') value = -value;
   if (parsed.type === '攻撃速度割合') value = -value;
+  if (parsed.type === '射程固定' && parsed.value === 1) {
+    // 誤爆で +1 が拾われるケースをフィルタ
+    value = parsed.value;
+  }
 
   return {
     stat,

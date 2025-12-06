@@ -25,16 +25,27 @@ const createMockChar = (id: string, name: string, buffs: Buff[] = []): Character
     weapon: '刀',
     attributes: ['平'],
     baseStats: {
+        hp: 1000,
         attack: 100,
         defense: 50,
         range: 200,
+        recovery: 0,
         cooldown: 30,
         cost: 10,
         damage_dealt: 0,
         damage_taken: 0,
+        attack_speed: 0,
+        attack_gap: 0,
+        movement_speed: 0,
+        knockback: 0,
+        target_count: 0,
+        ki_gain: 0,
+        damage_drain: 0,
+        ignore_defense: 0,
     },
     skills: buffs,
     strategies: [],
+    specialAbilities: [],
 });
 
 describe('calcBuffMatrix', () => {

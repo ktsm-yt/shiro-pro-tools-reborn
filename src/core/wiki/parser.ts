@@ -44,19 +44,30 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     const attributes: string[] = [];
     let attributesLocked = false;
     const baseStats: Record<string, number> = {
+        hp: 0,
         attack: 0,
         defense: 0,
         range: 0,
+        recovery: 0,
         cooldown: 0,
         cost: 0,
         damage_dealt: 0,
         damage_taken: 0,
+        attack_speed: 0,
+        attack_gap: 0,
+        movement_speed: 0,
+        knockback: 0,
+        target_count: 0,
+        ki_gain: 0,
+        damage_drain: 0,
+        ignore_defense: 0,
     };
     const skillCandidates: { text: string; header: string }[] = [];
     const strategyCandidates: { text: string; header: string }[] = [];
+    const specialCandidates: { text: string; header: string }[] = [];
 
     const fallbackTable = mainInfoTable ? null : tables[0];
-    let currentSection: 'skill' | 'strategy' | null = null;
+    let currentSection: 'skill' | 'strategy' | 'special' | null = null;
 
     tables.forEach(table => {
         const isMainInfoTable = mainInfoTable ? table === mainInfoTable : false;
@@ -184,9 +195,11 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
             // ステータス
             const statMap: Record<string, string> = {
+                '耐久': 'hp',
                 '攻撃': 'attack',
                 '防御': 'defense',
                 '射程': 'range',
+                '回復': 'recovery',
                 '気': 'cost',
             };
 
@@ -223,18 +236,20 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                 const text = tds[0].textContent?.trim() || '';
                 if (text === '特技') currentSection = 'skill';
                 else if (text === '計略') currentSection = 'strategy';
+                else if (text === '特殊能力') currentSection = 'special';
             }
 
             // 特技・計略・特殊能力
             // headerに [無印] や [改壱] が含まれる場合、または "特技" "計略" "特殊能力" という単語が含まれる場合
             const isSkillOrStrategy =
                 header.includes('[無印]') || header.includes('[改壱]') || header.includes('[改弐]') ||
-                header.includes('特技') || header.includes('計略') || header.includes('特殊能力');
+                header.includes('特技') || header.includes('計略') || header.includes('特殊能力') || currentSection === 'special';
 
             if (isSkillOrStrategy) {
                 // 計略判定: "気:" や "秒" が含まれる、またはヘッダーに"計略"が含まれる
                 // NOTE: 特殊能力も "気:" を含むことがあるため、currentSection または header で除外する
-                const isStrategy = header.includes('気:') || header.includes('秒') || header.includes('計略');
+                const isStrategy = currentSection === 'strategy' || header.includes('気:') || header.includes('秒') || header.includes('計略');
+                const isSpecial = currentSection === 'special' || header.includes('特殊能力');
 
                 // 説明文の抽出: 値セルだけでなく、その行の他のセルもチェック
                 // 構造: | ヘッダー | 名前 | 説明 |
@@ -267,7 +282,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
                 // ある程度の長さがある場合、それを説明文として採用
                 if (maxLength > 5) {
-                    const bucket = isStrategy ? strategyCandidates : skillCandidates;
+                    const bucket = isSpecial ? specialCandidates : (isStrategy ? strategyCandidates : skillCandidates);
                     // 重複防止
                     if (!bucket.some(c => c.text === bestCandidate)) {
                         bucket.push({ text: bestCandidate, header });
@@ -326,6 +341,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
     const skillTexts = pickTexts(skillCandidates);
     const strategyTexts = pickTexts(strategyCandidates);
+    const specialTexts = pickTexts(specialCandidates);
 
     return {
         name,
@@ -339,5 +355,6 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         baseStats,
         skillTexts: [...new Set(skillTexts)], // 重複排除
         strategyTexts: [...new Set(strategyTexts)], // 重複排除
+        specialTexts: [...new Set(specialTexts)],
     };
 }

@@ -1,6 +1,11 @@
 import type { Formation, Buff, Character, BuffMatrixResult, CharacterBuffResult, Stat } from '../types';
 
-const STAT_ORDER: Stat[] = ['attack', 'defense', 'range', 'cooldown', 'cost', 'damage_dealt', 'damage_taken'];
+const STAT_ORDER: Stat[] = [
+    'hp', 'attack', 'defense', 'range', 'recovery',
+    'cooldown', 'cost', 'damage_dealt', 'damage_taken',
+    'attack_speed', 'attack_gap', 'movement_speed', 'knockback',
+    'target_count', 'ki_gain', 'damage_drain', 'ignore_defense'
+];
 
 /**
  * 編成全体のバフを計算する
@@ -38,6 +43,7 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
         const allBuffs = [
             ...(sourceChar.skills || []),
             ...(sourceChar.strategies || []),
+            ...(sourceChar.specialAbilities || []),
         ];
 
         allBuffs.forEach((buff) => {
