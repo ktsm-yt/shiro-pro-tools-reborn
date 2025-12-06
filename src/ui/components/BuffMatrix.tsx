@@ -8,29 +8,49 @@ interface Props {
 }
 
 const STAT_LABELS: Record<Stat, string> = {
+    hp: '耐久',
     attack: '攻撃',
     defense: '防御',
     range: '射程',
+    recovery: '回復',
     cooldown: '短縮',
     cost: 'コスト',
     damage_dealt: '与ダメ',
     damage_taken: '被ダメ',
+    attack_speed: '攻速',
+    attack_gap: '隙',
+    movement_speed: '移速',
+    knockback: '後退',
+    target_count: '対象',
+    ki_gain: '気増',
+    damage_drain: '吸収',
+    ignore_defense: '無視',
 };
 
 // ステータスごとの目標値（仮）
 const STAT_REFERENCES: Record<Stat, number> = {
+    hp: 10000,
     attack: 15000,
     defense: 1000,
     range: 800,
+    recovery: 500,
     cooldown: 50, // %
     cost: 10,
     damage_dealt: 50, // %
     damage_taken: -50, // %
+    attack_speed: 50,
+    attack_gap: 50,
+    movement_speed: 50,
+    knockback: 100,
+    target_count: 2,
+    ki_gain: 10,
+    damage_drain: 10,
+    ignore_defense: 100,
 };
 
 export const BuffMatrix: React.FC<Props> = ({ formation, matrix }) => {
     const [isDetailed, setIsDetailed] = useState(true);
-    const stats: Stat[] = ['attack', 'defense', 'range']; // 表示するステータス
+    const stats: Stat[] = ['hp', 'attack', 'defense', 'range', 'recovery']; // 表示するステータス
 
     return (
         <div className="overflow-x-auto">

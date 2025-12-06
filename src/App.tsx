@@ -3,13 +3,12 @@ import { FormationGrid } from './ui/components/FormationGrid';
 import { BuffMatrix } from './ui/components/BuffMatrix';
 import { AttackerAnalysisModal } from './ui/components/AttackerAnalysisModal';
 import { WikiImporter } from './ui/components/WikiImporter';
-import { MOCK_FORMATION } from './core/mock/data';
 import { calcBuffMatrix } from './core/logic/buffs';
 import type { Character, Formation } from './core/types';
 
 function App() {
   // 編成データ
-  const [formation, setFormation] = useState<Formation>(MOCK_FORMATION);
+  const [formation, setFormation] = useState<Formation>({ slots: Array(8).fill(null) });
 
   // 選択されたキャラクター（分析用）
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);

@@ -19,6 +19,17 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [previewCharacter, setPreviewCharacter] = useState<Character | null>(null);
+    const [showDebug, setShowDebug] = useState(false);
+
+    const toggleBuff = (kind: 'skills' | 'strategies' | 'specialAbilities', id: string) => {
+        setPreviewCharacter(prev => {
+            if (!prev) return prev;
+            const cloned = { ...prev } as Character & { specialAbilities?: Character['specialAbilities'] };
+            const list = cloned[kind] || [];
+            cloned[kind] = list.map(b => b.id === id ? { ...b, isActive: !b.isActive } : b) as any;
+            return cloned;
+        });
+    };
 
     if (!isOpen) return null;
 
@@ -175,11 +186,24 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                     {previewCharacter && (
                         <div className="mt-6 space-y-4">
                             <div className="border-t pt-4">
-                                <h3 className="text-lg font-bold mb-3">プレビュー</h3>
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-lg font-bold">プレビュー</h3>
+                                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                                        <input
+                                            type="checkbox"
+                                            checked={showDebug}
+                                            onChange={(e) => setShowDebug(e.target.checked)}
+                                        />
+                                        デバッグ表示
+                                    </label>
+                                </div>
                                 <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                                     <div>
                                         <span className="text-sm text-gray-500">名前:</span>{' '}
-                                        <strong>{previewCharacter.name}</strong>
+                                        <strong>
+                                            {previewCharacter.period ? `［${previewCharacter.period}］` : ''}
+                                            {previewCharacter.name}
+                                        </strong>
                                     </div>
                                     <div>
                                         <span className="text-sm text-gray-500">武器種:</span>{' '}
@@ -199,14 +223,124 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                         </ul>
                                     </div>
                                     <div>
-                                        <span className="text-sm text-gray-500">スキル数:</span>{' '}
-                                        {previewCharacter.skills.length}
+                                        <span className="text-sm text-gray-500">特技テキスト数:</span>{' '}
+                                        {previewCharacter.rawSkillTexts?.length ?? 0}
                                     </div>
                                     <div>
-                                        <span className="text-sm text-gray-500">計略数:</span>{' '}
-                                        {previewCharacter.strategies.length}
+                                        <span className="text-sm text-gray-500">計略テキスト数:</span>{' '}
+                                        {previewCharacter.rawStrategyTexts?.length ?? 0}
+                                    </div>
+                                    <div>
+                                        <span className="text-sm text-gray-500">特殊能力テキスト数:</span>{' '}
+                                        {previewCharacter.rawSpecialTexts?.length ?? 0}
                                     </div>
                                 </div>
+
+                                {showDebug && (
+                                    <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4 text-sm space-y-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <h4 className="font-bold text-slate-700 mb-1">特技テキスト（採用）</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
+                                                    {(previewCharacter.rawSkillTexts ?? []).length === 0 && <li className="text-slate-400">なし</li>}
+                                                    {(previewCharacter.rawSkillTexts ?? []).map((t, i) => (
+                                                        <li key={`raw-skill-${i}`}>{t}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-slate-700 mb-1">計略テキスト（採用）</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
+                                                    {(previewCharacter.rawStrategyTexts ?? []).length === 0 && <li className="text-slate-400">なし</li>}
+                                                    {(previewCharacter.rawStrategyTexts ?? []).map((t, i) => (
+                                                        <li key={`raw-strategy-${i}`}>{t}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-slate-700 mb-1">特殊能力テキスト（採用）</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
+                                                    {(previewCharacter.rawSpecialTexts ?? []).length === 0 && <li className="text-slate-400">なし</li>}
+                                                    {(previewCharacter.rawSpecialTexts ?? []).map((t, i) => (
+                                                        <li key={`raw-special-${i}`}>{t}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="font-bold text-slate-700 mb-1">解析済みバフ</h4>
+                                            <div className="overflow-x-auto text-xs">
+                                                <table className="min-w-full border border-slate-200">
+                                                    <thead className="bg-slate-50">
+                                                        <tr>
+                                                            <th className="px-2 py-1 border border-slate-200">種別</th>
+                                                            <th className="px-2 py-1 border border-slate-200">stat</th>
+                                                            <th className="px-2 py-1 border border-slate-200">mode</th>
+                                                            <th className="px-2 py-1 border border-slate-200">value</th>
+                                                            <th className="px-2 py-1 border border-slate-200">target</th>
+                                                            <th className="px-2 py-1 border border-slate-200">active</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {previewCharacter.skills.length === 0 && previewCharacter.strategies.length === 0 && (
+                                                            <tr><td colSpan={6} className="text-center text-slate-400 py-2">なし</td></tr>
+                                                        )}
+                                                        {previewCharacter.skills.map((b, i) => (
+                                                            <tr key={`skill-buff-${b.id}`} className="border-t border-slate-200">
+                                                                <td className="px-2 py-1">特技#{i + 1}</td>
+                                                                <td className="px-2 py-1">{b.stat}</td>
+                                                                <td className="px-2 py-1">{b.mode}</td>
+                                                                <td className="px-2 py-1">{b.value}</td>
+                                                                <td className="px-2 py-1">{b.target}</td>
+                                                                <td className="px-2 py-1">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={b.isActive}
+                                                                        onChange={() => toggleBuff('skills', b.id)}
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                        {previewCharacter.strategies.map((b, i) => (
+                                                            <tr key={`strategy-buff-${b.id}`} className="border-t border-slate-200">
+                                                                <td className="px-2 py-1">計略#{i + 1}</td>
+                                                                <td className="px-2 py-1">{b.stat}</td>
+                                                                <td className="px-2 py-1">{b.mode}</td>
+                                                                <td className="px-2 py-1">{b.value}</td>
+                                                                <td className="px-2 py-1">{b.target}</td>
+                                                                <td className="px-2 py-1">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={b.isActive}
+                                                                        onChange={() => toggleBuff('strategies', b.id)}
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    {(previewCharacter.specialAbilities ?? []).map((b, i) => (
+                                                        <tr key={`special-buff-${b.id}`} className="border-t border-slate-200">
+                                                            <td className="px-2 py-1">特殊#{i + 1}</td>
+                                                            <td className="px-2 py-1">{b.stat}</td>
+                                                            <td className="px-2 py-1">{b.mode}</td>
+                                                            <td className="px-2 py-1">{b.value}</td>
+                                                            <td className="px-2 py-1">{b.target}</td>
+                                                            <td className="px-2 py-1">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={b.isActive}
+                                                                    onChange={() => toggleBuff('specialAbilities', b.id)}
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                            <p className="text-[11px] text-slate-500 mt-1">※ インポート直後は安全のためすべて off にしています。</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* 登録ボタン */}

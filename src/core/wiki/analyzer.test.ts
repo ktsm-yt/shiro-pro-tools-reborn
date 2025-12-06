@@ -214,4 +214,42 @@ describe('analyzeCharacter', () => {
         expect(character.skills[1].stat).toBe('defense');
         expect(character.skills[1].target).toBe('range');
     });
+
+    it('should handle cooldown reduction', () => {
+        const rawData: RawCharacterData = {
+            name: 'テストキャラ',
+            url: 'http://example.com',
+            weapon: '鈴',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: ['再配置時間が30%短縮'],
+            strategyTexts: [],
+        };
+
+        const character = analyzeCharacter(rawData);
+        expect(character.skills[0]).toMatchObject({
+            stat: 'cooldown',
+            mode: 'percent_max',
+            value: -30,
+        });
+    });
+
+    it('should handle recovery boost', () => {
+        const rawData: RawCharacterData = {
+            name: 'テストキャラ',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: ['回復が50上昇'],
+            strategyTexts: [],
+        };
+
+        const character = analyzeCharacter(rawData);
+        expect(character.skills[0]).toMatchObject({
+            stat: 'recovery',
+            mode: 'flat_sum',
+            value: 50,
+        });
+    });
 });

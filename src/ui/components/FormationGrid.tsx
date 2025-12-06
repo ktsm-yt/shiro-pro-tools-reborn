@@ -7,6 +7,8 @@ interface Props {
 }
 
 export const FormationGrid: React.FC<Props> = ({ formation, onCharacterClick }) => {
+    const displayName = (char: Character) => char.period ? `［${char.period}］${char.name}` : char.name;
+
     return (
         <div className="grid grid-cols-8 gap-2">
             {formation.slots.map((char, i) => (
@@ -17,7 +19,7 @@ export const FormationGrid: React.FC<Props> = ({ formation, onCharacterClick }) 
                 >
                     {char ? (
                         <>
-                            <div className="font-bold text-xs truncate w-full text-center">{char.name}</div>
+                            <div className="font-bold text-xs truncate w-full text-center">{displayName(char)}</div>
                             <div className="text-[10px] text-slate-500 truncate w-full text-center">
                                 {char.weapon}
                             </div>
