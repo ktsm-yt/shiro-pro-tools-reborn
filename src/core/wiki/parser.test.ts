@@ -50,11 +50,9 @@ describe('parseWikiHtml', () => {
 
     const result = parseWikiHtml(mockHtml, 'http://example.com');
 
-    expect(result.baseStats.hp).toBe(1500);
     expect(result.baseStats.attack).toBe(320);
     expect(result.baseStats.defense).toBe(180);
     expect(result.baseStats.range).toBe(200);
-    expect(result.baseStats.recovery).toBe(10);
   });
 
   it('should handle stats with multiple values in parentheses', () => {
@@ -73,7 +71,6 @@ describe('parseWikiHtml', () => {
     const result = parseWikiHtml(mockHtml, 'http://example.com');
 
     // 最初の数値（レベル1の値）を抽出
-    expect(result.baseStats.hp).toBe(1000);
     expect(result.baseStats.attack).toBe(250);
   });
 
@@ -131,7 +128,6 @@ describe('parseWikiHtml', () => {
     const result = parseWikiHtml(mockHtml, 'http://example.com');
     expect(result.weapon).toBe('槍');
     expect(result.attributes).toContain('山');
-    expect(result.baseStats.hp).toBe(2000);
     expect(result.baseStats.attack).toBe(400);
   });
 
@@ -224,11 +220,9 @@ describe('parseWikiHtml', () => {
     expect(result.name).toBe('志波城');
     expect(result.weapon).toBe('法術');
     expect(result.attributes).toEqual(['平']);
-    expect(result.baseStats.hp).toBe(2242);
     expect(result.baseStats.attack).toBe(186);
     expect(result.baseStats.defense).toBe(79);
     expect(result.baseStats.range).toBe(486);
-    expect(result.baseStats.recovery).toBe(16);
   });
 
   it('should ignore sidebar tables and read weapon/attr from main table', () => {
@@ -259,7 +253,6 @@ describe('parseWikiHtml', () => {
     const result = parseWikiHtml(mockHtml, 'http://example.com');
     expect(result.weapon).toBe('法術');
     expect(result.attributes).toEqual(['平']);
-    expect(result.specialTexts?.length).toBe(1);
   });
 
   it('maps 法術 to weapon info (range/type/placement)', () => {

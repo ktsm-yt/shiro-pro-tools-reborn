@@ -3,7 +3,7 @@ import { calcBuffMatrix } from '../logic/buffs';
 
 const createBuff = (
     id: string,
-    stat: 'attack' | 'defense' | 'range',
+    stat: 'attack' | 'defense' | 'range' | 'cooldown' | 'cost' | 'damage_dealt' | 'damage_taken',
     mode: 'percent_max' | 'flat_sum',
     value: number,
     target: 'self' | 'range' | 'all' = 'self'
@@ -24,23 +24,13 @@ export const MOCK_CHARS: Character[] = [
         weapon: '刀',
         attributes: ['平'],
         baseStats: {
-            hp: 2000,
             attack: 100,
             defense: 50,
             range: 200,
-            recovery: 10,
             cooldown: 30,
             cost: 10,
             damage_dealt: 0,
             damage_taken: 0,
-            attack_speed: 0,
-            attack_gap: 0,
-            movement_speed: 0,
-            knockback: 0,
-            target_count: 0,
-            ki_gain: 0,
-            damage_drain: 0,
-            ignore_defense: 0,
         },
         skills: [
             createBuff('b1', 'attack', 'percent_max', 25, 'all'), // 全体攻撃25%
@@ -54,23 +44,13 @@ export const MOCK_CHARS: Character[] = [
         weapon: '槍',
         attributes: ['平山'],
         baseStats: {
-            hp: 1800,
             attack: 80,
             defense: 40,
             range: 180,
-            recovery: 10,
             cooldown: 25,
             cost: 8,
             damage_dealt: 0,
             damage_taken: 0,
-            attack_speed: 0,
-            attack_gap: 0,
-            movement_speed: 0,
-            knockback: 0,
-            target_count: 0,
-            ki_gain: 0,
-            damage_drain: 0,
-            ignore_defense: 0,
         },
         skills: [
             createBuff('b3', 'attack', 'flat_sum', 80, 'all'), // 全体攻撃+80
@@ -83,23 +63,13 @@ export const MOCK_CHARS: Character[] = [
         weapon: '歌舞',
         attributes: ['平'],
         baseStats: {
-            hp: 1500,
             attack: 0,
             defense: 0,
             range: 300,
-            recovery: 50,
             cooldown: 0,
             cost: 12,
             damage_dealt: 0,
             damage_taken: 0,
-            attack_speed: 0,
-            attack_gap: 0,
-            movement_speed: 0,
-            knockback: 0,
-            target_count: 0,
-            ki_gain: 0,
-            damage_drain: 0,
-            ignore_defense: 0,
         },
         skills: [
             createBuff('b4', 'range', 'percent_max', 20, 'range'), // 範囲射程20%

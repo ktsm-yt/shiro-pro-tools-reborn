@@ -1,23 +1,13 @@
 export type Stat =
-    | 'hp'
     | 'attack'
     | 'defense'
     | 'range'
-    | 'recovery'
     | 'cooldown'
     | 'cost'
     | 'damage_dealt'
-    | 'damage_taken'
-    | 'attack_speed' // 攻撃速度
-    | 'attack_gap'   // 隙
-    | 'movement_speed' // 移動速度
-    | 'knockback'    // 後退
-    | 'target_count' // 対象数
-    | 'ki_gain'      // 気増加
-    | 'damage_drain' // 与ダメ回復
-    | 'ignore_defense'; // 防御無視
+    | 'damage_taken';
 
-export type BuffMode = 'percent_max' | 'flat_sum'; // 最大値適用 or 合算
+export type BuffMode = 'percent_max' | 'flat_sum';
 
 export type ConditionTag =
     | 'melee'
@@ -34,7 +24,7 @@ export interface Buff {
     stat: Stat;
     mode: BuffMode;
     value: number;
-    source: 'self_skill' | 'ally_skill' | 'strategy' | 'formation_skill' | 'special_ability';
+    source: 'self_skill' | 'ally_skill' | 'strategy' | 'formation_skill';
     target: 'self' | 'range' | 'all';
     conditionTags?: ConditionTag[]; // 条件タグ
     isActive: boolean;
@@ -52,10 +42,8 @@ export interface Character {
     baseStats: Record<Stat, number>; // 基礎ステータス
     skills: Buff[];
     strategies: Buff[];
-    specialAbilities?: Buff[];
     rawSkillTexts?: string[];
     rawStrategyTexts?: string[];
-    rawSpecialTexts?: string[];
 }
 
 export interface Formation {

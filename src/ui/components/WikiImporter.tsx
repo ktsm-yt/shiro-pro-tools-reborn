@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { fetchWikiPage, parseDirectHtml } from '../../core/wiki/fetcher';
-import { parseWikiHtml } from '../../core/wiki/parser';
-import { analyzeCharacter } from '../../core/wiki/analyzer';
+import { fetchWikiPage, parseDirectHtml } from '../../features/wiki/fetcher';
+import { parseWikiHtml } from '../../features/wiki/parser';
+import { analyzeCharacter } from '../../features/wiki/analyzer';
 import type { Character } from '../../core/types';
 
 interface Props {
@@ -21,10 +21,10 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     const [previewCharacter, setPreviewCharacter] = useState<Character | null>(null);
     const [showDebug, setShowDebug] = useState(false);
 
-    const toggleBuff = (kind: 'skills' | 'strategies' | 'specialAbilities', id: string) => {
+    const toggleBuff = (kind: 'skills' | 'strategies', id: string) => {
         setPreviewCharacter(prev => {
             if (!prev) return prev;
-            const cloned = { ...prev } as Character & { specialAbilities?: Character['specialAbilities'] };
+            const cloned = { ...prev } as Character;
             const list = cloned[kind] || [];
             cloned[kind] = list.map(b => b.id === id ? { ...b, isActive: !b.isActive } : b) as any;
             return cloned;
@@ -216,10 +216,11 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                     <div>
                                         <span className="text-sm text-gray-500">ステータス:</span>
                                         <ul className="ml-4 text-sm">
-                                            <li>耐久: {previewCharacter.baseStats.hp || 'N/A'}</li>
-                                            <li>攻撃: {previewCharacter.baseStats.attack || 'N/A'}</li>
-                                            <li>防御: {previewCharacter.baseStats.defense || 'N/A'}</li>
-                                            <li>射程: {previewCharacter.baseStats.range || 'N/A'}</li>
+                                            <li>攻撃: {previewCharacter.baseStats.attack ?? 'N/A'}</li>
+                                            <li>防御: {previewCharacter.baseStats.defense ?? 'N/A'}</li>
+                                            <li>射程: {previewCharacter.baseStats.range ?? 'N/A'}</li>
+                                            <li>再配置短縮: {previewCharacter.baseStats.cooldown ?? 'N/A'}</li>
+                                            <li>コスト: {previewCharacter.baseStats.cost ?? 'N/A'}</li>
                                         </ul>
                                     </div>
                                     <div>
@@ -229,10 +230,6 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                     <div>
                                         <span className="text-sm text-gray-500">計略テキスト数:</span>{' '}
                                         {previewCharacter.rawStrategyTexts?.length ?? 0}
-                                    </div>
-                                    <div>
-                                        <span className="text-sm text-gray-500">特殊能力テキスト数:</span>{' '}
-                                        {previewCharacter.rawSpecialTexts?.length ?? 0}
                                     </div>
                                 </div>
 
@@ -257,15 +254,7 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                                     ))}
                                                 </ul>
                                             </div>
-                                            <div>
-                                                <h4 className="font-bold text-slate-700 mb-1">特殊能力テキスト（採用）</h4>
-                                                <ul className="list-disc list-inside space-y-1 text-slate-700 text-xs">
-                                                    {(previewCharacter.rawSpecialTexts ?? []).length === 0 && <li className="text-slate-400">なし</li>}
-                                                    {(previewCharacter.rawSpecialTexts ?? []).map((t, i) => (
-                                                        <li key={`raw-special-${i}`}>{t}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
+                                            {/* 特殊能力テキストは現行モデルでは扱わない */}
                                         </div>
 
                                         <div>
@@ -318,22 +307,7 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                                                 </td>
                                                             </tr>
                                                         ))}
-                                                    {(previewCharacter.specialAbilities ?? []).map((b, i) => (
-                                                        <tr key={`special-buff-${b.id}`} className="border-t border-slate-200">
-                                                            <td className="px-2 py-1">特殊#{i + 1}</td>
-                                                            <td className="px-2 py-1">{b.stat}</td>
-                                                            <td className="px-2 py-1">{b.mode}</td>
-                                                            <td className="px-2 py-1">{b.value}</td>
-                                                            <td className="px-2 py-1">{b.target}</td>
-                                                            <td className="px-2 py-1">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={b.isActive}
-                                                                    onChange={() => toggleBuff('specialAbilities', b.id)}
-                                                                />
-                                                            </td>
-                                                        </tr>
-                                                    ))}
+                                                    {/* 特殊能力バフ行は非対応 */}
                                                 </tbody>
                                             </table>
                                         </div>

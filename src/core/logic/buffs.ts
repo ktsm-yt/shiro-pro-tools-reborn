@@ -1,4 +1,6 @@
-import type { Formation, Buff, Character, BuffMatrixResult, CharacterBuffResult } from '../types';
+import type { Formation, Buff, Character, BuffMatrixResult, CharacterBuffResult, Stat } from '../types';
+
+const STAT_ORDER: Stat[] = ['attack', 'defense', 'range', 'cooldown', 'cost', 'damage_dealt', 'damage_taken'];
 
 /**
  * 編成全体のバフを計算する
@@ -11,47 +13,20 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
     // 1. 結果オブジェクトの初期化
     formation.slots.forEach((char) => {
         if (!char) return;
+
+        const initStats: any = {};
+        const breakdown: any = {};
+        STAT_ORDER.forEach((stat: any) => {
+            const baseVal = char.baseStats[stat] ?? 0;
+            initStats[stat] = baseVal;
+            breakdown[stat] = { base: baseVal, selfBuff: 0, allyBuff: 0 };
+        });
+
         result[char.id] = {
-            stats: {
-                hp: char.baseStats.hp,
-                attack: char.baseStats.attack,
-                defense: char.baseStats.defense,
-                range: char.baseStats.range,
-                recovery: char.baseStats.recovery,
-                cooldown: char.baseStats.cooldown,
-                cost: char.baseStats.cost,
-                damage_dealt: char.baseStats.damage_dealt,
-                damage_taken: char.baseStats.damage_taken,
-                attack_speed: char.baseStats.attack_speed,
-                attack_gap: char.baseStats.attack_gap,
-                movement_speed: char.baseStats.movement_speed,
-                knockback: char.baseStats.knockback,
-                target_count: char.baseStats.target_count,
-                ki_gain: char.baseStats.ki_gain,
-                damage_drain: char.baseStats.damage_drain,
-                ignore_defense: char.baseStats.ignore_defense,
-            },
+            stats: initStats,
             activeBuffs: [],
             percentMax: {},
-            breakdown: {
-                hp: { base: char.baseStats.hp, selfBuff: 0, allyBuff: 0 },
-                attack: { base: char.baseStats.attack, selfBuff: 0, allyBuff: 0 },
-                defense: { base: char.baseStats.defense, selfBuff: 0, allyBuff: 0 },
-                range: { base: char.baseStats.range, selfBuff: 0, allyBuff: 0 },
-                recovery: { base: char.baseStats.recovery, selfBuff: 0, allyBuff: 0 },
-                cooldown: { base: char.baseStats.cooldown, selfBuff: 0, allyBuff: 0 },
-                cost: { base: char.baseStats.cost, selfBuff: 0, allyBuff: 0 },
-                damage_dealt: { base: char.baseStats.damage_dealt, selfBuff: 0, allyBuff: 0 },
-                damage_taken: { base: char.baseStats.damage_taken, selfBuff: 0, allyBuff: 0 },
-                attack_speed: { base: char.baseStats.attack_speed, selfBuff: 0, allyBuff: 0 },
-                attack_gap: { base: char.baseStats.attack_gap, selfBuff: 0, allyBuff: 0 },
-                movement_speed: { base: char.baseStats.movement_speed, selfBuff: 0, allyBuff: 0 },
-                knockback: { base: char.baseStats.knockback, selfBuff: 0, allyBuff: 0 },
-                target_count: { base: char.baseStats.target_count, selfBuff: 0, allyBuff: 0 },
-                ki_gain: { base: char.baseStats.ki_gain, selfBuff: 0, allyBuff: 0 },
-                damage_drain: { base: char.baseStats.damage_drain, selfBuff: 0, allyBuff: 0 },
-                ignore_defense: { base: char.baseStats.ignore_defense, selfBuff: 0, allyBuff: 0 },
-            }
+            breakdown,
         };
     });
 
@@ -63,7 +38,6 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
         const allBuffs = [
             ...(sourceChar.skills || []),
             ...(sourceChar.strategies || []),
-            ...(sourceChar.specialAbilities || []),
         ];
 
         allBuffs.forEach((buff) => {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { fetchWikiPage } from '../../core/wiki/fetcher';
-import { parseWikiHtml } from '../../core/wiki/parser';
-import { analyzeCharacter } from '../../core/wiki/analyzer';
+import { fetchWikiPage } from '../../features/wiki/fetcher';
+import { parseWikiHtml } from '../../features/wiki/parser';
+import { analyzeCharacter } from '../../features/wiki/analyzer';
 import type { Character } from '../../core/types';
 
 interface Props {

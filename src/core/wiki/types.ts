@@ -9,17 +9,16 @@ export interface RawCharacterData {
     placement?: '近' | '遠' | '遠近';
     attributes: string[];
     baseStats: {
-        hp?: number;
         attack?: number;
         defense?: number;
         range?: number;
-        recovery?: number;
         cooldown?: number;
         cost?: number;
+        damage_dealt?: number;
+        damage_taken?: number;
     };
     skillTexts: string[];
     strategyTexts: string[];
-    specialTexts?: string[];
 }
 
 export interface WikiFetchResult {

@@ -44,18 +44,19 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     const attributes: string[] = [];
     let attributesLocked = false;
     const baseStats: Record<string, number> = {
-        hp: 0,
         attack: 0,
         defense: 0,
         range: 0,
-        recovery: 0,
+        cooldown: 0,
+        cost: 0,
+        damage_dealt: 0,
+        damage_taken: 0,
     };
     const skillCandidates: { text: string; header: string }[] = [];
     const strategyCandidates: { text: string; header: string }[] = [];
-    const specialCandidates: { text: string; header: string }[] = [];
 
     const fallbackTable = mainInfoTable ? null : tables[0];
-    let currentSection: 'skill' | 'strategy' | 'special' | null = null;
+    let currentSection: 'skill' | 'strategy' | null = null;
 
     tables.forEach(table => {
         const isMainInfoTable = mainInfoTable ? table === mainInfoTable : false;
@@ -183,11 +184,10 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
             // ステータス
             const statMap: Record<string, string> = {
-                '耐久': 'hp',
                 '攻撃': 'attack',
                 '防御': 'defense',
                 '射程': 'range',
-                '回復': 'recovery',
+                '気': 'cost',
             };
 
             if (isMainInfoTable || !mainInfoTable) {
@@ -221,8 +221,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
             if (tds.length === 1 && header === '') {
                 // Section Header (e.g., "特殊能力", "特技", "計略")
                 const text = tds[0].textContent?.trim() || '';
-                if (text === '特殊能力') currentSection = 'special';
-                else if (text === '特技') currentSection = 'skill';
+                if (text === '特技') currentSection = 'skill';
                 else if (text === '計略') currentSection = 'strategy';
             }
 
@@ -230,14 +229,12 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
             // headerに [無印] や [改壱] が含まれる場合、または "特技" "計略" "特殊能力" という単語が含まれる場合
             const isSkillOrStrategy =
                 header.includes('[無印]') || header.includes('[改壱]') || header.includes('[改弐]') ||
-                header.includes('特技') || header.includes('計略') || header.includes('特殊能力') ||
-                currentSection === 'special'; // Context-based detection
+                header.includes('特技') || header.includes('計略') || header.includes('特殊能力');
 
             if (isSkillOrStrategy) {
                 // 計略判定: "気:" や "秒" が含まれる、またはヘッダーに"計略"が含まれる
                 // NOTE: 特殊能力も "気:" を含むことがあるため、currentSection または header で除外する
-                const isSpecial = header.includes('特殊能力') || currentSection === 'special';
-                const isStrategy = !isSpecial && (header.includes('気:') || header.includes('秒') || header.includes('計略'));
+                const isStrategy = header.includes('気:') || header.includes('秒') || header.includes('計略');
 
                 // 説明文の抽出: 値セルだけでなく、その行の他のセルもチェック
                 // 構造: | ヘッダー | 名前 | 説明 |
@@ -270,7 +267,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
                 // ある程度の長さがある場合、それを説明文として採用
                 if (maxLength > 5) {
-                    const bucket = isSpecial ? specialCandidates : (isStrategy ? strategyCandidates : skillCandidates);
+                    const bucket = isStrategy ? strategyCandidates : skillCandidates;
                     // 重複防止
                     if (!bucket.some(c => c.text === bestCandidate)) {
                         bucket.push({ text: bestCandidate, header });
@@ -329,7 +326,6 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
     const skillTexts = pickTexts(skillCandidates);
     const strategyTexts = pickTexts(strategyCandidates);
-    const specialTexts = pickTexts(specialCandidates);
 
     return {
         name,
@@ -343,6 +339,5 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         baseStats,
         skillTexts: [...new Set(skillTexts)], // 重複排除
         strategyTexts: [...new Set(strategyTexts)], // 重複排除
-        specialTexts: [...new Set(specialTexts)],
     };
 }
