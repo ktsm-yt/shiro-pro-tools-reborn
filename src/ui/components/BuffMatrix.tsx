@@ -7,7 +7,7 @@ interface Props {
     matrix: BuffMatrixResult;
 }
 
-const STAT_LABELS: Record<Stat, string> = {
+const STAT_LABELS: Partial<Record<Stat, string>> = {
     hp: '耐久',
     attack: '攻撃',
     defense: '防御',
@@ -28,7 +28,7 @@ const STAT_LABELS: Record<Stat, string> = {
 };
 
 // ステータスごとの目標値（仮）
-const STAT_REFERENCES: Record<Stat, number> = {
+const STAT_REFERENCES: Partial<Record<Stat, number>> = {
     hp: 10000,
     attack: 15000,
     defense: 1000,
@@ -87,11 +87,11 @@ export const BuffMatrix: React.FC<Props> = ({ formation, matrix }) => {
                                 if (!char) return <td key={i} className="p-2 border border-slate-200 bg-slate-50" />;
 
                                 const result = matrix[char.id];
-                                const totalVal = result?.stats[stat] || 0;
+                                const totalVal = result?.stats[stat] ?? 0;
 
                                 // バフ内訳の取得
                                 const breakdown = result.breakdown?.[stat] || {
-                                    base: char.baseStats[stat],
+                                    base: char.baseStats[stat] ?? 0,
                                     selfBuff: 0,
                                     allyBuff: 0
                                 };
@@ -103,7 +103,7 @@ export const BuffMatrix: React.FC<Props> = ({ formation, matrix }) => {
                                                 base={breakdown.base}
                                                 selfBuff={breakdown.selfBuff}
                                                 allyBuff={breakdown.allyBuff}
-                                                reference={STAT_REFERENCES[stat]}
+                                                reference={STAT_REFERENCES[stat] ?? 0}
                                             />
                                         ) : (
                                             <div className="text-center">

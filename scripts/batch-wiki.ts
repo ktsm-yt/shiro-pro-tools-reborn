@@ -7,12 +7,16 @@
  */
 
 import { JSDOM } from 'jsdom';
-import { parseWikiHtml } from '../src/core/wiki/parser';
-import { analyzeCharacter } from '../src/core/wiki/analyzer';
+import { parseWikiHtml } from '../src/core/wiki/parser.ts';
+import { analyzeCharacter } from '../src/core/wiki/analyzer.ts';
 
-// Polyfill DOMParser for parseWikiHtml
+// Polyfill DOM APIs for server-side execution
+const dom = new JSDOM();
 if (typeof (global as any).DOMParser === 'undefined') {
-  (global as any).DOMParser = new JSDOM().window.DOMParser;
+  (global as any).DOMParser = dom.window.DOMParser;
+}
+if (typeof (global as any).document === 'undefined') {
+  (global as any).document = dom.window.document;
 }
 
 const urls = process.argv.slice(2);

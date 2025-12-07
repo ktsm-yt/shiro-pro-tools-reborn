@@ -4,8 +4,8 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import type { Character } from '../../core/types';
-import { calculateDamage } from '../../core/logic/damage';
-import type { DamageCalculationContext } from '../../core/types';
+import { calculateDamage } from '../../core/logic/damageCalculator';
+import type { EnvironmentSettings } from '../../core/types';
 
 interface Props {
     isOpen: boolean;
@@ -14,26 +14,30 @@ interface Props {
 }
 
 export const AttackerAnalysisModal: React.FC<Props> = ({ isOpen, onClose, character }) => {
-    const [context, setContext] = useState<DamageCalculationContext>({
+    const [environment, setEnvironment] = useState<EnvironmentSettings>({
+        inspireFlat: 0,
+        duplicateBuff: 0,
+        attackSpeed: 0,
+        gapReduction: 0,
         enemyDefense: 0,
+        defenseDebuffPercent: 0,
+        defenseDebuffFlat: 0,
+        damageTaken: 0,
         enemyHpPercent: 100,
-        allyHpPercent: 100,
-        hitCount: 1,
-        isStrategyActive: false,
     });
 
     const calculationResult = useMemo(() => {
         if (!character) return null;
-        return calculateDamage(character, context);
-    }, [character, context]);
+        return calculateDamage(character, environment);
+    }, [character, environment]);
 
     if (!isOpen || !character || !calculationResult) return null;
 
     // レーダーチャート用データ（仮：まだ正規化ロジックがないため固定値のまま）
     const radarData = [
-        { subject: '攻撃性能', A: Math.min(150, calculationResult.finalAttack / 10), fullMark: 150 },
+        { subject: '攻撃性能', A: Math.min(150, calculationResult.phase1Attack / 10), fullMark: 150 },
         { subject: '防御性能', A: 98, fullMark: 150 },
-        { subject: '射程', A: Math.min(150, character.baseStats.range / 3), fullMark: 150 },
+        { subject: '射程', A: Math.min(150, (character.baseStats.range ?? 0) / 3), fullMark: 150 },
         { subject: 'コスト効率', A: 99, fullMark: 150 },
         { subject: '支援力', A: 85, fullMark: 150 },
         { subject: '汎用性', A: 65, fullMark: 150 },
@@ -41,14 +45,15 @@ export const AttackerAnalysisModal: React.FC<Props> = ({ isOpen, onClose, charac
 
     // ダメージ構成データ（積み上げ棒グラフ用）
     const breakdown = calculationResult.breakdown;
+    const phase1 = breakdown.phase1;
     // 割合バフの影響量を概算（基礎値 * 割合）
-    const percentBuffValue = (breakdown.baseAttack + breakdown.attackFlat) * (breakdown.attackPercent / 100);
+    const percentBuffValue = (phase1.baseAttack + phase1.flatBuffApplied) * (phase1.percentBuffApplied / 100);
 
     const damageData = [
         {
             name: '攻撃力構成',
-            base: breakdown.baseAttack,
-            flatBuff: breakdown.attackFlat,
+            base: phase1.baseAttack,
+            flatBuff: phase1.flatBuffApplied,
             percentBuff: percentBuffValue,
             multiplier: 0, // 乗算枠は別途表現するか、ここに含めるか検討
         },
@@ -77,28 +82,28 @@ export const AttackerAnalysisModal: React.FC<Props> = ({ isOpen, onClose, charac
                                     <label className="block text-xs text-slate-500 mb-1">敵防御力</label>
                                     <input
                                         type="number"
-                                        value={context.enemyDefense}
-                                        onChange={(e) => setContext({ ...context, enemyDefense: Number(e.target.value) })}
+                                        value={environment.enemyDefense}
+                                        onChange={(e) => setEnvironment({ ...environment, enemyDefense: Number(e.target.value) })}
                                         className="w-full px-2 py-1 border rounded text-sm"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-slate-500 mb-1">攻撃ヒット数</label>
+                                    <label className="block text-xs text-slate-500 mb-1">防御デバフ (%)</label>
                                     <input
                                         type="number"
-                                        value={context.hitCount}
-                                        onChange={(e) => setContext({ ...context, hitCount: Number(e.target.value) })}
+                                        value={environment.defenseDebuffPercent}
+                                        onChange={(e) => setEnvironment({ ...environment, defenseDebuffPercent: Number(e.target.value) })}
                                         className="w-full px-2 py-1 border rounded text-sm"
                                     />
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">防御デバフ (固定)</label>
                                     <input
-                                        type="checkbox"
-                                        id="strategyActive"
-                                        checked={context.isStrategyActive}
-                                        onChange={(e) => setContext({ ...context, isStrategyActive: e.target.checked })}
+                                        type="number"
+                                        value={environment.defenseDebuffFlat}
+                                        onChange={(e) => setEnvironment({ ...environment, defenseDebuffFlat: Number(e.target.value) })}
+                                        className="w-full px-2 py-1 border rounded text-sm"
                                     />
-                                    <label htmlFor="strategyActive" className="text-sm">計略発動中</label>
                                 </div>
                             </div>
                         </div>
@@ -111,11 +116,11 @@ export const AttackerAnalysisModal: React.FC<Props> = ({ isOpen, onClose, charac
                             <ul className="space-y-3 text-sm relative z-10">
                                 <li className="flex justify-between items-center border-b border-slate-700 pb-2">
                                     <span className="text-slate-400">最終攻撃力</span>
-                                    <strong className="text-xl text-yellow-400 font-mono">{Math.round(calculationResult.finalAttack)}</strong>
+                                    <strong className="text-xl text-yellow-400 font-mono">{Math.round(calculationResult.phase1Attack)}</strong>
                                 </li>
                                 <li className="flex justify-between items-center border-b border-slate-700 pb-2">
                                     <span className="text-slate-400">1ヒットダメージ</span>
-                                    <strong className="text-lg text-white font-mono">{Math.round(calculationResult.damagePerHit)}</strong>
+                                    <strong className="text-lg text-white font-mono">{Math.round(calculationResult.phase4Damage)}</strong>
                                 </li>
                                 <li className="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
                                     <span className="text-slate-300 font-bold">合計ダメージ</span>
@@ -123,7 +128,7 @@ export const AttackerAnalysisModal: React.FC<Props> = ({ isOpen, onClose, charac
                                 </li>
                                 <li className="flex justify-between items-center pt-1">
                                     <span className="text-slate-400 text-xs">敵の有効防御</span>
-                                    <strong className="text-slate-300 font-mono text-xs">{Math.round(calculationResult.effectiveDefense)}</strong>
+                                    <strong className="text-slate-300 font-mono text-xs">{Math.round(breakdown.phase3.effectiveDefense)}</strong>
                                 </li>
                             </ul>
                         </div>
@@ -181,11 +186,11 @@ export const AttackerAnalysisModal: React.FC<Props> = ({ isOpen, onClose, charac
                         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                             <h3 className="text-sm font-bold mb-2 text-slate-700">分析サマリー</h3>
                             <ul className="list-disc list-inside space-y-1 text-sm text-slate-700">
-                                <li>基礎攻撃力 <strong>{breakdown.baseAttack}</strong> に対して、バフ合計で <strong>+{Math.round(calculationResult.finalAttack - breakdown.baseAttack)}</strong> の強化を受けています。</li>
-                                <li>攻撃割合バフ合計: <strong>{breakdown.attackPercent}%</strong></li>
-                                <li>攻撃固定バフ合計: <strong>{breakdown.attackFlat}</strong></li>
-                                {breakdown.enemyDefenseDebuffPercent > 0 && (
-                                    <li>敵の防御力を <strong>{breakdown.enemyDefenseDebuffPercent}%</strong> 低下させています。</li>
+                                <li>基礎攻撃力 <strong>{phase1.baseAttack}</strong> に対して、バフ合計で <strong>+{Math.round(phase1.finalAttack - phase1.baseAttack)}</strong> の強化を受けています。</li>
+                                <li>攻撃割合バフ合計: <strong>{phase1.percentBuffApplied}%</strong></li>
+                                <li>攻撃固定バフ合計: <strong>{phase1.flatBuffApplied}</strong></li>
+                                {breakdown.phase3.effectiveDefense < environment.enemyDefense && (
+                                    <li>敵の防御力を <strong>{environment.enemyDefense - breakdown.phase3.effectiveDefense}</strong> 低下させています。</li>
                                 )}
                             </ul>
                         </div>

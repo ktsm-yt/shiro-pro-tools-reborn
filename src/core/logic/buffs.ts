@@ -1,10 +1,38 @@
-import type { Formation, Buff, Character, BuffMatrixResult, CharacterBuffResult, Stat } from '../types';
+import type { Formation, Buff, Character, BuffMatrixResult, CharacterBuffResult, Stat, ConditionContext, Target } from '../types';
+import { areConditionsSatisfied } from '../conditions';
 
 const STAT_ORDER: Stat[] = [
-    'hp', 'attack', 'defense', 'range', 'recovery',
-    'cooldown', 'cost', 'damage_dealt', 'damage_taken',
-    'attack_speed', 'attack_gap', 'movement_speed', 'knockback',
-    'target_count', 'ki_gain', 'damage_drain', 'ignore_defense'
+    'hp',
+    'attack',
+    'defense',
+    'range',
+    'attack_speed',
+    'attack_gap',
+    'recovery',
+    'cost',
+    'strategy_cooldown',
+    'target_count',
+    'attack_count',
+    'damage_dealt',
+    'give_damage',
+    'damage_taken',
+    'damage_recovery',
+    'critical_bonus',
+    'inspire',
+    'enemy_attack',
+    'enemy_defense',
+    'enemy_defense_ignore_percent',
+    'enemy_defense_ignore_complete',
+    'enemy_movement',
+    'enemy_range',
+    'enemy_knockback',
+    // legacy placeholders
+    'cooldown',
+    'movement_speed',
+    'knockback',
+    'ki_gain',
+    'damage_drain',
+    'ignore_defense',
 ];
 
 /**
@@ -12,7 +40,7 @@ const STAT_ORDER: Stat[] = [
  * @param formation 編成データ
  * @returns バフ計算結果
  */
-export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
+export function calcBuffMatrix(formation: Formation, conditionContext?: ConditionContext): BuffMatrixResult {
     const result: BuffMatrixResult = {};
 
     // 1. 結果オブジェクトの初期化
@@ -21,7 +49,7 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
 
         const initStats: any = {};
         const breakdown: any = {};
-        STAT_ORDER.forEach((stat: any) => {
+        STAT_ORDER.forEach((stat: Stat) => {
             const baseVal = char.baseStats[stat] ?? 0;
             initStats[stat] = baseVal;
             breakdown[stat] = { base: baseVal, selfBuff: 0, allyBuff: 0 };
@@ -53,7 +81,7 @@ export function calcBuffMatrix(formation: Formation): BuffMatrixResult {
             formation.slots.forEach((targetChar) => {
                 if (!targetChar) return;
 
-                if (isBuffApplicable(buff, sourceChar, targetChar)) {
+                if (isBuffApplicable(buff, sourceChar, targetChar, conditionContext)) {
                     const isSelfBuff = sourceChar.id === targetChar.id;
                     applyBuffToResult(result[targetChar.id], buff, isSelfBuff);
                 }
@@ -103,6 +131,23 @@ function applyBuffToResult(result: CharacterBuffResult, buff: Buff, isSelfBuff: 
         } else {
             breakdown.allyBuff += buff.value;
         }
+    } else if (buff.mode === 'percent_reduction') {
+        const delta = base * (buff.value / 100);
+        result.stats[buff.stat] -= delta;
+        if (isSelfBuff) {
+            breakdown.selfBuff -= delta;
+        } else {
+            breakdown.allyBuff -= delta;
+        }
+    } else if (buff.mode === 'absolute_set') {
+        const prev = result.stats[buff.stat] ?? 0;
+        const delta = buff.value - prev;
+        result.stats[buff.stat] = buff.value;
+        if (isSelfBuff) {
+            breakdown.selfBuff += delta;
+        } else {
+            breakdown.allyBuff += delta;
+        }
     }
 
     result.activeBuffs.push(buff);
@@ -118,19 +163,28 @@ function applyBuffToResult(result: CharacterBuffResult, buff: Buff, isSelfBuff: 
 export function isBuffApplicable(
     buff: Buff,
     sourceChar: Character,
-    targetChar: Character
+    targetChar: Character,
+    conditionContext?: ConditionContext
 ): boolean {
-    // 条件判定（タグなど）は後で実装
-    // if (buff.conditionTags && !checkConditions(buff, targetChar)) return false;
+    if (buff.conditionTags && !areConditionsSatisfied(buff.conditionTags, targetChar, conditionContext)) {
+        return false;
+    }
 
-    switch (buff.target) {
+    switch (buff.target as Target) {
         case 'self':
             return sourceChar.id === targetChar.id;
+        case 'ally':
+            // 対象指定は本来単体だが座標情報がないため一旦全員に適用
+            return true;
         case 'all':
             return true;
         case 'range':
             // TODO: 射程内判定の実装。一旦「自分には適用、他人は適用」としておく（テスト用）
             // 実際はMap上の配置と射程計算が必要
+            return true;
+        case 'field':
+            return true;
+        case 'out_of_range':
             return true;
         default:
             return false;

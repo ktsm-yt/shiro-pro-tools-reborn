@@ -1,4 +1,5 @@
 import type { RawCharacterData } from './types';
+import { weaponMapping } from '../data/weaponMapping';
 
 /**
  * HTML文字列からキャラクター情報を抽出する
@@ -292,30 +293,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         });
     });
 
-    // 武器種マッピングテーブル
-    const weaponMapping: Record<string, { range: '近' | '遠' | '遠近'; type: '物' | '術'; placement: '近' | '遠' | '遠近' }> = {
-        "弓": { range: "遠", type: "物", placement: "遠" },
-        "鉄砲": { range: "遠", type: "物", placement: "遠" },
-        "石弓": { range: "遠", type: "物", placement: "遠" },
-        "投剣": { range: "遠", type: "物", placement: "遠近" },
-        "軍船": { range: "遠", type: "物", placement: "遠近" },
-        "槍": { range: "近", type: "物", placement: "近" },
-        "刀": { range: "近", type: "物", placement: "近" },
-        "盾": { range: "近", type: "物", placement: "近" },
-        "ランス": { range: "近", type: "物", placement: "近" },
-        "双剣": { range: "近", type: "物", placement: "近" },
-        "拳": { range: "近", type: "物", placement: "近" },
-        "鞭": { range: "近", type: "物", placement: "遠近" },
-        "茶器": { range: "近", type: "物", placement: "遠近" },
-        "歌舞": { range: "遠", type: "術", placement: "遠" },
-        "本": { range: "遠", type: "術", placement: "遠" },
-        "法術": { range: "遠", type: "術", placement: "遠" },
-        "鈴": { range: "遠", type: "術", placement: "遠" },
-        "杖": { range: "遠", type: "術", placement: "遠" },
-        "札": { range: "遠", type: "術", placement: "遠" },
-        "大砲": { range: "遠", type: "物", placement: "遠近" },
-        "陣貝": { range: "遠", type: "術", placement: "遠近" }
-    };
+    // 武器種マッピングは共通モジュールから取得
 
     let weaponRange: '近' | '遠' | '遠近' | undefined;
     let weaponType: '物' | '術' | undefined;
@@ -327,16 +305,29 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     }
 
     if (weapon !== 'Unknown' && weaponMapping[weapon]) {
-        weaponRange = weaponMapping[weapon].range;
-        weaponType = weaponMapping[weapon].type;
-        placement = weaponMapping[weapon].placement;
+        const info = weaponMapping[weapon];
+        // 共通マッピングの range は '近' | '遠' だが、parser では placement を weaponRange として扱う
+        weaponRange = info.placement;
+        weaponType = info.type;
+        placement = info.placement;
     }
 
-    // 改壱があればそれを優先して採用
+    // 余分な説明（CV・セリフ・コメント等）を除去
+    const cleanDescription = (text: string): string | null => {
+        if (!text) return null;
+        const cutIndex = text.search(/キャラクターボイス|台詞|クリックすると|贈り物イベント|コメント|画像/);
+        const trimmed = (cutIndex >= 0 ? text.slice(0, cutIndex) : text).replace(/\s+/g, ' ').trim();
+        if (trimmed === '' || trimmed.length <= 1) return null;
+        return trimmed;
+    };
+
+    // 改壱があればそれを優先して採用し、不要部分をクリーンアップ
     const pickTexts = (arr: { text: string; header: string }[]) => {
         const kai = arr.filter(c => c.header.includes('改壱') || c.header.includes('改弐'));
         const src = kai.length > 0 ? kai : arr;
-        return src.map(c => c.text);
+        return src
+            .map(c => cleanDescription(c.text))
+            .filter((t): t is string => !!t);
     };
 
     const skillTexts = pickTexts(skillCandidates);

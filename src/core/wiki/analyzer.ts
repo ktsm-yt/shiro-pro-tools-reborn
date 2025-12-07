@@ -1,21 +1,26 @@
 import type { Character, Buff } from '../types';
 import type { RawCharacterData } from './types';
 import { parseSkillLine } from '../parser/buffParser';
-import { convertToRebornBuff, createBuffId } from '../parser/converter';
+import { convertToRebornBuff } from '../parser/converter';
 
 let buffIdCounter = 0;
 
 export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isActive'>[] {
     if (!text || text.trim() === '') return [];
+    const isPerGiant = /巨大化(する)?(度|ごと|毎|毎に|たび)/.test(text);
     const parsed = parseSkillLine(text);
-    if (process.env.DEBUG_BUFF === '1') {
+    if (import.meta.env?.VITE_DEBUG_BUFF === '1') {
         // eslint-disable-next-line no-console
         console.log('[DEBUG_BUFF]', text, parsed);
     }
     const uniq = new Map<string, Omit<Buff, 'id' | 'source' | 'isActive'>>();
     parsed.map(convertToRebornBuff).forEach(b => {
-        const key = `${b.stat}-${b.mode}-${b.value}-${b.target}-${b.costType ?? ''}-${b.inspireSourceStat ?? ''}`;
-        if (!uniq.has(key)) uniq.set(key, b);
+        const buff = { ...b };
+        if (isPerGiant && typeof buff.value === 'number') {
+            buff.value = Number((buff.value * 5).toFixed(6));
+        }
+        const key = `${buff.stat}-${buff.mode}-${buff.value}-${buff.target}-${buff.costType ?? ''}-${buff.inspireSourceStat ?? ''}`;
+        if (!uniq.has(key)) uniq.set(key, buff);
     });
     return Array.from(uniq.values());
 }
@@ -29,6 +34,16 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
     const skills: Buff[] = [];
     const strategies: Buff[] = [];
     const specials: Buff[] = [];
+    const seasonAttributes: string[] = [];
+    const periodLabel = rawData.period ?? '';
+
+    const addSeasonIfMatched = (keyword: string) => {
+        if (periodLabel.includes(keyword) && !seasonAttributes.includes(keyword)) {
+            seasonAttributes.push(keyword);
+        }
+    };
+
+    ['夏', '絢爛', 'ハロウィン', '学園', '聖夜', '正月', 'お月見', '花嫁'].forEach(addSeasonIfMatched);
     // 特技テキストを解析
     for (const skillText of rawData.skillTexts) {
         const buffTemplates = analyzeBuffText(skillText);
@@ -74,6 +89,8 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
         id: `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: rawData.name,
         period: rawData.period,
+        seasonAttributes,
+        type: 'castle_girl',
         weapon: rawData.weapon,
         weaponRange: rawData.weaponRange,
         weaponType: rawData.weaponType,
