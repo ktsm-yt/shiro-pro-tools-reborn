@@ -154,6 +154,7 @@ export interface Buff {
 export interface Character {
     id: string;
     name: string;
+    imageUrl?: string; // 画像URL
     rarity?: number; // レアリティ
     period?: string; // [絢爛] etc.
     seasonAttributes?: string[]; // 夏/絢爛/ハロウィン/学園/聖夜/正月/お月見/花嫁

@@ -122,8 +122,8 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                         <button
                             onClick={() => setInputMode('url')}
                             className={`px-4 py-2 font-medium transition-colors ${inputMode === 'url'
-                                    ? 'border-b-2 border-blue-500 text-blue-600'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                ? 'border-b-2 border-blue-500 text-blue-600'
+                                : 'text-gray-500 hover:text-gray-700'
                                 }`}
                         >
                             URL入力
@@ -131,8 +131,8 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                         <button
                             onClick={() => setInputMode('html')}
                             className={`px-4 py-2 font-medium transition-colors ${inputMode === 'html'
-                                    ? 'border-b-2 border-blue-500 text-blue-600'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                ? 'border-b-2 border-blue-500 text-blue-600'
+                                : 'text-gray-500 hover:text-gray-700'
                                 }`}
                         >
                             HTML直接入力
@@ -208,40 +208,56 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                         デバッグ表示
                                     </label>
                                 </div>
-                                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                                    <div>
-                                        <span className="text-sm text-gray-500">名前:</span>{' '}
-                                        <strong>
-                                            {previewCharacter.period ? `［${previewCharacter.period}］` : ''}
-                                            {previewCharacter.name}
-                                        </strong>
+                                <div className="bg-gray-50 p-4 rounded-lg flex flex-col md:flex-row gap-4">
+                                    <div className="space-y-2 flex-1">
+                                        <div>
+                                            <span className="text-sm text-gray-500">名前:</span>{' '}
+                                            <strong>
+                                                {previewCharacter.period ? `［${previewCharacter.period}］` : ''}
+                                                {previewCharacter.name}
+                                            </strong>
+                                        </div>
+                                        <div>
+                                            <span className="text-sm text-gray-500">武器種:</span>{' '}
+                                            {previewCharacter.weapon}
+                                        </div>
+                                        <div>
+                                            <span className="text-sm text-gray-500">属性:</span>{' '}
+                                            {previewCharacter.attributes.join(', ')}
+                                        </div>
+                                        <div>
+                                            <span className="text-sm text-gray-500">ステータス:</span>
+                                            <ul className="ml-4 text-sm">
+                                                <li>攻撃: {previewCharacter.baseStats.attack ?? 'N/A'}</li>
+                                                <li>防御: {previewCharacter.baseStats.defense ?? 'N/A'}</li>
+                                                <li>射程: {previewCharacter.baseStats.range ?? 'N/A'}</li>
+                                                <li>再配置短縮: {previewCharacter.baseStats.cooldown ?? 'N/A'}</li>
+                                                <li>コスト: {previewCharacter.baseStats.cost ?? 'N/A'}</li>
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <span className="text-sm text-gray-500">特技テキスト数:</span>{' '}
+                                            {previewCharacter.rawSkillTexts?.length ?? 0}
+                                        </div>
+                                        <div>
+                                            <span className="text-sm text-gray-500">計略テキスト数:</span>{' '}
+                                            {previewCharacter.rawStrategyTexts?.length ?? 0}
+                                        </div>
                                     </div>
-                                    <div>
-                                        <span className="text-sm text-gray-500">武器種:</span>{' '}
-                                        {previewCharacter.weapon}
-                                    </div>
-                                    <div>
-                                        <span className="text-sm text-gray-500">属性:</span>{' '}
-                                        {previewCharacter.attributes.join(', ')}
-                                    </div>
-                                    <div>
-                                        <span className="text-sm text-gray-500">ステータス:</span>
-                                        <ul className="ml-4 text-sm">
-                                            <li>攻撃: {previewCharacter.baseStats.attack ?? 'N/A'}</li>
-                                            <li>防御: {previewCharacter.baseStats.defense ?? 'N/A'}</li>
-                                            <li>射程: {previewCharacter.baseStats.range ?? 'N/A'}</li>
-                                            <li>再配置短縮: {previewCharacter.baseStats.cooldown ?? 'N/A'}</li>
-                                            <li>コスト: {previewCharacter.baseStats.cost ?? 'N/A'}</li>
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <span className="text-sm text-gray-500">特技テキスト数:</span>{' '}
-                                        {previewCharacter.rawSkillTexts?.length ?? 0}
-                                    </div>
-                                    <div>
-                                        <span className="text-sm text-gray-500">計略テキスト数:</span>{' '}
-                                        {previewCharacter.rawStrategyTexts?.length ?? 0}
-                                    </div>
+                                    {previewCharacter.imageUrl && (
+                                        <div className="shrink-0">
+                                            <div className="w-32 h-32 md:w-48 md:h-full relative bg-gray-200 rounded-lg overflow-hidden border border-gray-300">
+                                                <img
+                                                    src={previewCharacter.imageUrl}
+                                                    alt={previewCharacter.name}
+                                                    className="w-full h-full object-contain"
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).style.display = 'none';
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {showDebug && (
@@ -318,10 +334,10 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                                                 </td>
                                                             </tr>
                                                         ))}
-                                                    {/* 特殊能力バフ行は非対応 */}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                        {/* 特殊能力バフ行は非対応 */}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                             <p className="text-[11px] text-slate-500 mt-1">※ インポート直後は安全のためすべて off にしています。</p>
                                         </div>
                                     </div>

@@ -42,6 +42,76 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     })();
 
     let weapon = 'Unknown';
+
+    // 3. 画像抽出
+    // メインテーブル内、またはページ内の name を含む画像を探索
+    let imageUrl: string | undefined;
+
+    // 戦略:
+    // 1. メインテーブル内の画像で、alt/titleが名前を含むものを優先
+    // 2. なければ、ページ全体から探す (ただしヘッダー/フッターは除外したいがDOMParserだと位置不明)
+    // 3. 画像URLの補正 (相対パス -> 絶対パス)
+
+    const findImage = (scope: Element): string | undefined => {
+        const imgs = Array.from(scope.querySelectorAll('img'));
+        // 名前と一致する、または "画像" を含むもの
+        // 例: "江戸城.jpg", "江戸城 画像"
+        const candidates = imgs.filter(img => {
+            const alt = (img.getAttribute('alt') || '').trim();
+            const title = (img.getAttribute('title') || '').trim();
+            const src = img.getAttribute('src') || '';
+
+            // アイコン系を除外
+            if (src.includes('icon') || src.includes('button') || widthIsSmall(img)) return false;
+
+            return alt.includes(name) || title.includes(name) || alt.includes('画像') || title.includes('画像');
+        });
+
+        if (candidates.length > 0) {
+            // 最初に見つかったものを採用 (通常は立ち絵が最初に来る)
+            return candidates[0].getAttribute('src') || undefined;
+        }
+        return undefined;
+    };
+
+    const widthIsSmall = (img: HTMLImageElement) => {
+        const w = img.getAttribute('width');
+        const h = img.getAttribute('height');
+        if (w && parseInt(w) < 100) return true;
+        if (h && parseInt(h) < 100) return true;
+        return false;
+    };
+
+    if (mainInfoTable) {
+        imageUrl = findImage(mainInfoTable);
+    }
+
+    if (!imageUrl) {
+        // メインテーブルで見つからない場合、全体から探す
+        // ただし icon などを強く除外する
+        imageUrl = findImage(doc.body);
+    }
+
+    // URL補正
+    if (imageUrl && !imageUrl.startsWith('http')) {
+        // url (元のURL) のオリジンを付与
+        try {
+            const urlObj = new URL(url);
+            if (imageUrl.startsWith('/')) {
+                imageUrl = `${urlObj.origin}${imageUrl}`;
+            } else {
+                // 相対パスの場合は適当に結合 (Wikiの構造によるが、ベースタグがない場合はディレクトリ結合)
+                // swikiは通常 root からのパスか、プラグイン生成のURL
+                // 安全策で origin + / + imageUrl (if not start with /)
+                imageUrl = `${urlObj.origin}/${imageUrl}`;
+            }
+        } catch (e) {
+            // urlが無効な場合はそのまま (or ignore)
+            console.warn('Invalid base URL for image resolution', url);
+        }
+    }
+
+
     const attributes: string[] = [];
     let attributesLocked = false;
     const baseStats: Record<string, number> = {
@@ -347,5 +417,6 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         skillTexts: [...new Set(skillTexts)], // 重複排除
         strategyTexts: [...new Set(strategyTexts)], // 重複排除
         specialTexts: [...new Set(specialTexts)],
+        imageUrl,
     };
 }
