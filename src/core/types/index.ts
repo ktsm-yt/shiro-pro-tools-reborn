@@ -147,11 +147,14 @@ export interface Buff {
     confidence?: 'certain' | 'inferred' | 'uncertain';
     inferenceReason?: string;
     note?: string;              // 補足情報
+    name?: string;              // 表示名 (UI用)
+    description?: string;       // 説明文 (UI用)
 }
 
 export interface Character {
     id: string;
     name: string;
+    rarity?: number; // レアリティ
     period?: string; // [絢爛] etc.
     seasonAttributes?: string[]; // 夏/絢爛/ハロウィン/学園/聖夜/正月/お月見/花嫁
     type?: 'castle_girl' | 'ambush' | 'lord'; // デフォルトは城娘
@@ -245,6 +248,9 @@ export interface EnvironmentSettings {
     // 共通バフ
     inspireFlat: number;           // 鼓舞（固定値）
     duplicateBuff: number;         // 効果重複%
+    attackPercent: number;         // 環境からの攻撃%バフ
+    damageDealt: number;           // 与ダメ%
+    damageMultiplier: number;      // 乗算バフ（環境由来）
 
     // 速度バフ
     attackSpeed: number;           // 攻撃速度%

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { fetchWikiPage, parseDirectHtml } from '../../core/wiki/fetcher';
 import { parseWikiHtml } from '../../core/wiki/parser';
 import { analyzeCharacter } from '../../core/wiki/analyzer';
@@ -20,6 +20,25 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     const [error, setError] = useState<string | null>(null);
     const [previewCharacter, setPreviewCharacter] = useState<Character | null>(null);
     const [showDebug, setShowDebug] = useState(false);
+
+    const handleClose = () => {
+        setUrlInput('');
+        setHtmlInput('');
+        setError(null);
+        setPreviewCharacter(null);
+        onClose();
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const listener = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                handleClose();
+            }
+        };
+        window.addEventListener('keydown', listener);
+        return () => window.removeEventListener('keydown', listener);
+    }, [isOpen]);
 
     const toggleBuff = (kind: 'skills' | 'strategies', id: string) => {
         setPreviewCharacter(prev => {
@@ -80,14 +99,6 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
             onCharacterImported(previewCharacter);
             handleClose();
         }
-    };
-
-    const handleClose = () => {
-        setUrlInput('');
-        setHtmlInput('');
-        setError(null);
-        setPreviewCharacter(null);
-        onClose();
     };
 
     return (

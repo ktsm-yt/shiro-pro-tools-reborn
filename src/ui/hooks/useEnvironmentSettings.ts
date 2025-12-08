@@ -12,6 +12,9 @@ const STORAGE_KEY = 'shiro-pro-damage-calculator-environment';
 const DEFAULT_ENVIRONMENT: EnvironmentSettings = {
     inspireFlat: 0,
     duplicateBuff: 0,
+    attackPercent: 0,
+    damageDealt: 0,
+    damageMultiplier: 1,
     attackSpeed: 0,
     gapReduction: 0,
     enemyDefense: 0,
@@ -27,7 +30,7 @@ export function useEnvironmentSettings() {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
-                return JSON.parse(stored);
+                return { ...DEFAULT_ENVIRONMENT, ...JSON.parse(stored) };
             }
         } catch (error) {
             console.error('Failed to load environment settings:', error);

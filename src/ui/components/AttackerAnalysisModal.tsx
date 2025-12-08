@@ -17,6 +17,9 @@ export const AttackerAnalysisModal: React.FC<Props> = ({ isOpen, onClose, charac
     const [environment, setEnvironment] = useState<EnvironmentSettings>({
         inspireFlat: 0,
         duplicateBuff: 0,
+        attackPercent: 0,
+        damageDealt: 0,
+        damageMultiplier: 1,
         attackSpeed: 0,
         gapReduction: 0,
         enemyDefense: 0,

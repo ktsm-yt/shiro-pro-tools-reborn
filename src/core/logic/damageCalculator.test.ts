@@ -11,6 +11,9 @@ describe('damageCalculator', () => {
     const defaultEnvironment: EnvironmentSettings = {
         inspireFlat: 0,
         duplicateBuff: 0,
+        attackPercent: 0,
+        damageDealt: 0,
+        damageMultiplier: 1,
         attackSpeed: 0,
         gapReduction: 0,
         enemyDefense: 0,

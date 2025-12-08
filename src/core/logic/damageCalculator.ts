@@ -61,24 +61,25 @@ function calculatePhase1(
 } {
     const baseAttack = character.baseStats.attack || 0;
     const selfBuffs = character.selfBuffs;
+    const envAttackPercent = environment.attackPercent || 0;
 
     if (!selfBuffs) {
         return {
             attack: baseAttack,
             breakdown: {
                 baseAttack,
-                percentBuffApplied: 0,
+                percentBuffApplied: envAttackPercent,
                 flatBuffApplied: 0,
                 additiveBuffApplied: 0,
                 duplicateBuffApplied: 0,
-                finalAttack: baseAttack,
+                finalAttack: baseAttack * (1 + envAttackPercent / 100),
             },
         };
     }
 
     // 割合バフ（最大値ルール適用）
     const selfPercentBuff = applyMaxValueRule(selfBuffs.percentBuffs || []);
-    const percentBuffApplied = selfPercentBuff;
+    const percentBuffApplied = selfPercentBuff + envAttackPercent;
 
     // 固定値バフ（すべて加算）
     const flatBuffApplied = (selfBuffs.flatBuffs || []).reduce((sum, val) => sum + val, 0);
@@ -123,7 +124,8 @@ function calculatePhase1(
 
 function calculatePhase2(
     attack: number,
-    character: Character
+    character: Character,
+    environment: EnvironmentSettings
 ): {
     damage: number;
     breakdown: DamageBreakdown['phase2'];
@@ -138,6 +140,11 @@ function calculatePhase2(
             damage *= mult.value;
             multipliers.push({ type: mult.type, value: mult.value });
         }
+    }
+
+    if (environment.damageMultiplier && environment.damageMultiplier !== 1) {
+        damage *= environment.damageMultiplier;
+        multipliers.push({ type: 'env_multiplier', value: environment.damageMultiplier });
     }
 
     return {
@@ -204,8 +211,7 @@ function calculatePhase4(
     damage: number;
     breakdown: DamageBreakdown['phase4'];
 } {
-    // 与ダメ（現状は環境設定にないため0）
-    const damageDealt = 0;
+    const damageDealt = environment.damageDealt || 0;
 
     // 被ダメ（最大値のみ適用）
     const damageTaken = environment.damageTaken;
@@ -330,7 +336,7 @@ export function calculateDamage(
     const phase1 = calculatePhase1(character, environment);
 
     // Phase 2: ダメージ倍率の適用
-    const phase2 = calculatePhase2(phase1.attack, character);
+    const phase2 = calculatePhase2(phase1.attack, character, environment);
 
     // Phase 3: 防御力による減算
     const phase3 = calculatePhase3(phase2.damage, character, environment);
