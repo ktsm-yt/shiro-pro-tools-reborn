@@ -52,34 +52,61 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     // 2. なければ、ページ全体から探す (ただしヘッダー/フッターは除外したいがDOMParserだと位置不明)
     // 3. 画像URLの補正 (相対パス -> 絶対パス)
 
-    const findImage = (scope: Element): string | undefined => {
-        const imgs = Array.from(scope.querySelectorAll('img'));
-        // 名前と一致する、または "画像" を含むもの
-        // 例: "江戸城.jpg", "江戸城 画像"
-        const candidates = imgs.filter(img => {
-            const alt = (img.getAttribute('alt') || '').trim();
-            const title = (img.getAttribute('title') || '').trim();
-            const src = img.getAttribute('src') || '';
-
-            // アイコン系を除外
-            if (src.includes('icon') || src.includes('button') || widthIsSmall(img)) return false;
-
-            return alt.includes(name) || title.includes(name) || alt.includes('画像') || title.includes('画像');
-        });
-
-        if (candidates.length > 0) {
-            // 最初に見つかったものを採用 (通常は立ち絵が最初に来る)
-            return candidates[0].getAttribute('src') || undefined;
-        }
-        return undefined;
-    };
-
     const widthIsSmall = (img: HTMLImageElement) => {
         const w = img.getAttribute('width');
         const h = img.getAttribute('height');
-        if (w && parseInt(w) < 100) return true;
-        if (h && parseInt(h) < 100) return true;
+        if (w && parseInt(w) < 60) return true;
+        if (h && parseInt(h) < 60) return true;
         return false;
+    };
+
+    const getImageSize = (img: HTMLImageElement) => {
+        const w = img.getAttribute('width');
+        const h = img.getAttribute('height');
+        const width = w ? parseInt(w, 10) : null;
+        const height = h ? parseInt(h, 10) : null;
+        return { width, height };
+    };
+
+    const findImage = (scope: Element): string | undefined => {
+        const imgs = Array.from(scope.querySelectorAll('img'));
+
+        // 名前と一致する、または "画像" を含むものを候補化
+        const candidates = imgs
+            .filter(img => {
+                const alt = (img.getAttribute('alt') || '').trim();
+                const title = (img.getAttribute('title') || '').trim();
+                const src = img.getAttribute('src') || '';
+
+                // 明らかなボタン/アイコンは除外
+                if (src.includes('icon') || src.includes('button') || widthIsSmall(img)) return false;
+
+                return alt.includes(name) || title.includes(name) || alt.includes('画像') || title.includes('画像');
+            })
+            .map(img => {
+                const { width, height } = getImageSize(img);
+                const maxDim = Math.max(width ?? 9999, height ?? 9999);
+                const minDim = Math.min(width ?? maxDim, height ?? maxDim);
+                const area = (width ?? maxDim) * (height ?? maxDim);
+                const isSquareish = width && height ? Math.abs(width - height) <= Math.max(width, height) * 0.25 : false;
+
+                // 優先度: 小さめの正方形アイコン (80〜180px) を最優先。次にその他。大きな立ち絵は最後。
+                let priority = 2;
+                if (maxDim <= 180 && maxDim >= 80) priority = 0;
+                else if (isSquareish) priority = 1;
+
+                return { img, priority, area, maxDim, minDim };
+            })
+            .sort((a, b) => {
+                if (a.priority !== b.priority) return a.priority - b.priority;
+                // 同じ優先度なら面積が小さい方を優先（小アイコンを取る）
+                return a.area - b.area;
+            });
+
+        if (candidates.length > 0) {
+            return candidates[0].img.getAttribute('src') || undefined;
+        }
+        return undefined;
     };
 
     if (mainInfoTable) {

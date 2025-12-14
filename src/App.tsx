@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Character, Formation } from './core/types';
 import { MOCK_CHARS } from './core/mock/data';
 import { CharacterSidebar } from './ui/components/CharacterSidebar';
@@ -11,9 +11,19 @@ import { DamageAnalysis } from './ui/components/DamageAnalysis';
 import { buildVisualBuffMatrix } from './ui/utils/visualBuffMatrix';
 import { useEnvironmentSettings } from './ui/hooks/useEnvironmentSettings';
 import { useDamageCalculation } from './ui/hooks/useDamageCalculation';
+import { useCharacterStorage } from './ui/hooks/useCharacterStorage';
+import { useFormationStorage } from './ui/hooks/useFormationStorage';
 import { getAttributeMeta, isRangedWeapon } from './ui/constants/meta';
+import { loadCharacters } from './core/storage';
+import { FormationSaveModal } from './ui/components/FormationSaveModal';
+import { ConfirmModal } from './ui/components/ConfirmModal';
+
+// Simple Formation Saver UI Component
+import { Save, FolderOpen, Trash2 } from 'lucide-react';
 
 type ActiveTab = 'matrix' | 'analysis';
+
+const SESSION_KEY = 'shiropro_reborn_session';
 
 export default function App() {
   // --- State ---
@@ -26,9 +36,103 @@ export default function App() {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false); // For matrix detail
   const [isImporterOpen, setIsImporterOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isLoadMenuOpen, setIsLoadMenuOpen] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+
+  const loadMenuRef = useRef<HTMLDivElement | null>(null);
+  const isSessionRestoredRef = useRef(false);
+
+  // Persistence Hooks
+  const { savedCharacters, addCharacter: saveCharacter } = useCharacterStorage();
+  const { savedFormations, saveFormation: saveFormationToStorage, deleteFormation: deleteFormationFromStorage } = useFormationStorage();
 
   // Environment & Calc
   const { settings: env, setSettings: setEnv, reset: resetEnv } = useEnvironmentSettings();
+
+  // Combine Mock + Saved Characters
+  // Memoize to avoid reflows
+  const allCharacters = useMemo(() => {
+    // Deduplicate by ID just in case
+    const map = new Map<string, Character>();
+    MOCK_CHARS.forEach(c => map.set(c.id, c));
+    savedCharacters.forEach(c => map.set(c.id, c));
+    return Array.from(map.values());
+  }, [savedCharacters]);
+
+  // Load last formation on mount (Auto-load)
+  useEffect(() => {
+    // Implement auto-save of CURRENT slots for better UX.
+    const savedSlotsJson = localStorage.getItem('shiropro_reborn_current_slots');
+    if (savedSlotsJson) {
+      try {
+        const slotIds = JSON.parse(savedSlotsJson) as (string | null)[];
+
+        // Hydrate from both Mock and Storage
+        const chars = loadCharacters();
+        const map = new Map<string, Character>();
+        MOCK_CHARS.forEach(c => map.set(c.id, c));
+        chars.forEach(c => map.set(c.id, c));
+
+        const finalSlots = slotIds.map(id => {
+          if (!id) return null;
+          return map.get(id) || null;
+        });
+        setFormation({ slots: finalSlots });
+      } catch (e) {
+        console.error("Failed to auto-load slots", e);
+      }
+    }
+  }, []); // Run once. Dependency on MOCK_CHARS is constant.
+
+  // Auto-save slots
+  useEffect(() => {
+    const slotIds = formation.slots.map(c => c?.id || null);
+    localStorage.setItem('shiropro_reborn_current_slots', JSON.stringify(slotIds));
+  }, [formation]);
+
+  // --- Session Persistence (UI state, selected char, tab) ---
+  useEffect(() => {
+    if (isSessionRestoredRef.current) return;
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw) as {
+        activeTab?: ActiveTab;
+        isLeftSidebarCollapsed?: boolean;
+        isRightSidebarCollapsed?: boolean;
+        selectedCharacterId?: string | null;
+      };
+
+      if (data.activeTab) setActiveTab(data.activeTab);
+      if (typeof data.isLeftSidebarCollapsed === 'boolean') setIsLeftSidebarCollapsed(data.isLeftSidebarCollapsed);
+      if (typeof data.isRightSidebarCollapsed === 'boolean') setIsRightSidebarCollapsed(data.isRightSidebarCollapsed);
+
+      if (data.selectedCharacterId) {
+        const found = allCharacters.find(c => c.id === data.selectedCharacterId) || null;
+        setSelectedCharacter(found);
+      }
+    } catch (e) {
+      console.error('Failed to restore session', e);
+    } finally {
+      isSessionRestoredRef.current = true;
+    }
+  }, [allCharacters]);
+
+  useEffect(() => {
+    const payload = {
+      activeTab,
+      isLeftSidebarCollapsed,
+      isRightSidebarCollapsed,
+      selectedCharacterId: selectedCharacter?.id ?? null,
+    };
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.error('Failed to persist session', e);
+    }
+  }, [activeTab, isLeftSidebarCollapsed, isRightSidebarCollapsed, selectedCharacter]);
+
 
   // Derived
   const activeChars = useMemo(() => formation.slots.filter((c): c is Character => Boolean(c)), [formation]);
@@ -39,6 +143,10 @@ export default function App() {
   const { results, comparisons } = useDamageCalculation(activeChars, env);
 
   // --- Handlers ---
+
+  const handleEnvReset = () => {
+    resetEnv();
+  };
 
   const addCharacter = (char: Character) => {
     if (formationIds.includes(char.id)) return;
@@ -68,15 +176,33 @@ export default function App() {
   };
 
   const clearFormation = () => {
-    if (window.confirm('編成をクリアしますか？')) {
-      setFormation({ slots: Array(8).fill(null) });
-      setSelectedCharacter(null);
-    }
+    setFormation({ slots: Array(8).fill(null) });
+    setSelectedCharacter(null);
+    setIsClearConfirmOpen(false);
   };
 
   const handleCharacterImported = (character: Character) => {
+    saveCharacter(character); // Save to storage
     addCharacter(character);
     setIsImporterOpen(false);
+  };
+
+  // Formation Load/Save Handlers
+  const handleSaveFormation = (name: string) => {
+    saveFormationToStorage(name, formation);
+    setIsSaveModalOpen(false);
+  };
+
+  const handleLoadFormation = (id: string) => {
+    const target = savedFormations.find(f => f.id === id);
+    if (!target) return;
+
+    const newSlots = target.slotIds.map(charId => {
+      if (!charId) return null;
+      return allCharacters.find(c => c.id === charId) || null;
+    });
+    setFormation({ slots: newSlots });
+    setIsLoadMenuOpen(false);
   };
 
   const onCharClick = (char: Character) => {
@@ -130,6 +256,38 @@ export default function App() {
     return { melee, ranged, attrs, total: activeChars.length };
   }, [activeChars]);
 
+  const suggestedFormationName = useMemo(() => {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mi = String(now.getMinutes()).padStart(2, '0');
+    const timeLabel = `${mm}/${dd} ${hh}:${mi}`;
+    if (activeChars.length === 0) return `新規編成 ${timeLabel}`;
+    const names = activeChars.slice(0, 3).map(c => c.name).join('・');
+    return `${names}${activeChars.length > 3 ? '…' : ''} ${timeLabel}`;
+  }, [activeChars]);
+
+  // Close load dropdown on outside click / Esc
+  useEffect(() => {
+    if (!isLoadMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (!loadMenuRef.current) return;
+      if (!loadMenuRef.current.contains(e.target as Node)) {
+        setIsLoadMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsLoadMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isLoadMenuOpen]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-gray-100 overflow-hidden font-sans">
 
@@ -167,8 +325,50 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Save/Load Controls */}
+            <div className="flex bg-gray-800 rounded-lg p-0.5 border border-gray-700 mr-2" ref={loadMenuRef}>
+              <button
+                onClick={() => setIsSaveModalOpen(true)}
+                title="編成を保存"
+                className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-700/50 rounded transition-colors"
+              >
+                <Save size={16} />
+              </button>
+              <div className="relative">
+                <button
+                  title="編成を読み込み"
+                  onClick={() => setIsLoadMenuOpen((v) => !v)}
+                  className={`p-1.5 rounded transition-colors ${isLoadMenuOpen
+                    ? 'text-green-400 bg-gray-700/70'
+                    : 'text-gray-400 hover:text-green-400 hover:bg-gray-700/50'
+                    }`}
+                >
+                  <FolderOpen size={16} />
+                </button>
+                {/* Dropdown for Load */}
+                {isLoadMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+                    <div className="py-1 max-h-72 overflow-y-auto">
+                      {savedFormations.length === 0 && <div className="px-3 py-2 text-xs text-gray-500">保存された編成はありません</div>}
+                      {savedFormations.map(f => (
+                        <div key={f.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-700 cursor-pointer group/item">
+                          <span onClick={() => handleLoadFormation(f.id)} className="text-xs truncate flex-1">{f.name}</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); if (confirm('削除しますか？')) deleteFormationFromStorage(f.id); }}
+                            className="text-gray-600 hover:text-red-400 opacity-0 group-hover/item:opacity-100"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <button
-              onClick={clearFormation}
+              onClick={() => setIsClearConfirmOpen(true)}
               className="px-3 py-1.5 bg-gray-800 hover:bg-red-900/30 text-gray-400 hover:text-red-400 rounded-lg text-xs font-medium transition-colors border border-gray-700 hover:border-red-900/50"
             >
               Clear
@@ -188,7 +388,7 @@ export default function App() {
 
         {/* Left Sidebar */}
         <CharacterSidebar
-          characters={MOCK_CHARS}
+          characters={allCharacters}
           formationIds={formationIds}
           collapsed={isLeftSidebarCollapsed}
           onToggle={() => setIsLeftSidebarCollapsed(prev => !prev)}
@@ -254,7 +454,7 @@ export default function App() {
           selectedChar={selectedCharacter}
           env={env}
           onEnvChange={setEnv}
-          onEnvReset={resetEnv}
+          onEnvReset={handleEnvReset}
           activeTab={activeTab}
         />
       </div>
@@ -264,6 +464,22 @@ export default function App() {
         isOpen={isImporterOpen}
         onClose={() => setIsImporterOpen(false)}
         onCharacterImported={handleCharacterImported}
+      />
+
+      <FormationSaveModal
+        isOpen={isSaveModalOpen}
+        suggestedName={suggestedFormationName}
+        onClose={() => setIsSaveModalOpen(false)}
+        onSave={handleSaveFormation}
+      />
+
+      <ConfirmModal
+        isOpen={isClearConfirmOpen}
+        title="編成をクリアしますか？"
+        description="現在の編成スロットを空にします。この操作は取り消せません。"
+        confirmLabel="クリアする"
+        onConfirm={clearFormation}
+        onClose={() => setIsClearConfirmOpen(false)}
       />
 
       {/* Legacy Modal (Optionally used) */}

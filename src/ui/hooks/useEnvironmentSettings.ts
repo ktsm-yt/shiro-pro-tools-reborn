@@ -6,10 +6,9 @@
 
 import { useState, useEffect } from 'react';
 import type { EnvironmentSettings } from '../../core/types';
+import { loadEnvironment, saveEnvironment } from '../../core/storage';
 
-const STORAGE_KEY = 'shiro-pro-damage-calculator-environment';
-
-const DEFAULT_ENVIRONMENT: EnvironmentSettings = {
+export const DEFAULT_ENVIRONMENT: EnvironmentSettings = {
     inspireFlat: 0,
     duplicateBuff: 0,
     attackPercent: 0,
@@ -26,25 +25,12 @@ const DEFAULT_ENVIRONMENT: EnvironmentSettings = {
 
 export function useEnvironmentSettings() {
     const [settings, setSettings] = useState<EnvironmentSettings>(() => {
-        // LocalStorageから読み込み
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) {
-                return { ...DEFAULT_ENVIRONMENT, ...JSON.parse(stored) };
-            }
-        } catch (error) {
-            console.error('Failed to load environment settings:', error);
-        }
-        return DEFAULT_ENVIRONMENT;
+        return loadEnvironment(DEFAULT_ENVIRONMENT);
     });
 
     // 設定が変更されたらLocalStorageに保存
     useEffect(() => {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-        } catch (error) {
-            console.error('Failed to save environment settings:', error);
-        }
+        saveEnvironment(settings);
     }, [settings]);
 
     const reset = () => {

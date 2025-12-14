@@ -1,10 +1,10 @@
-import type { Character, DamageCalculationResult, EnvironmentSettings } from '../../core/types';
+import type { Character, DamageCalculationResult, DamageComparison } from '../../core/types';
 import { CompactCharacterCard } from './CompactCharacterCard';
 
 interface DamageAnalysisProps {
     characters: Character[];
     results: Record<string, DamageCalculationResult>;
-    comparisons: Record<string, { before?: DamageCalculationResult }>;
+    comparisons: Record<string, DamageComparison>;
     onCharClick: (char: Character) => void;
     onRemove: (charId: string) => void;
 }
@@ -21,7 +21,9 @@ export function DamageAnalysis({
     const activeChars = characters;
 
     const totalDPS = Object.values(results).reduce((sum, r) => sum + (r?.dps || 0), 0);
-    const baseTotalDPS = Object.values(comparisons).reduce((sum, c) => sum + (c.before?.dps || 0), 0);
+    const baseTotalDPS = Object.values(comparisons).reduce((sum, comparison) => {
+        return sum + (comparison?.before?.dps || 0);
+    }, 0);
 
     if (activeChars.length === 0) {
         return (
