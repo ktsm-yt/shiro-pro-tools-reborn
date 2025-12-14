@@ -37,7 +37,12 @@ type AllyBuffStat =
   | 'attack_speed'        // 攻撃速度（旧版の「速度」）
   | 'attack_gap'          // 攻撃隙（旧版の「隙」）
   | 'recovery'            // 回復力
-  | 'cost'                // 気（消費・獲得）
+  | 'cost'                // 自然気（40%/70%）
+  | 'cost_gradual'        // 徐々気（時間経過で増加）
+  | 'cost_giant'          // 気軽減（巨大化消費気軽減）
+  | 'cost_strategy'       // 計略消費気軽減
+  | 'cost_enemy_defeat'   // 気牛（敵を倒すと気増加）
+  | 'cost_defeat_bonus'   // 気ノビ（撃破時の獲得気増加）
   | 'strategy_cooldown'   // 計略再使用時間
   | 'target_count'        // 攻撃対象数
   | 'attack_count';       // 攻撃回数
@@ -61,8 +66,10 @@ type EnemyDebuffStat =
   | 'enemy_defense_ignore_percent'      // 割合防御無視（○%）
   | 'enemy_defense_ignore_complete'     // 完全防御無視
   | 'enemy_movement'                    // 敵の移動速度低下
-  | 'enemy_knockback'                   // ノックバック
-  | 'enemy_range';                      // 敵の射程低下
+  | 'enemy_retreat'                     // 敵後退（マス数）
+  | 'enemy_range'                       // 敵の射程低下
+  | 'enemy_damage_dealt'                // 敵の与ダメ低下（防御貢献）
+  | 'enemy_damage_taken';               // 敵の被ダメ上昇（攻撃貢献）
 
 // ========================================
 // 特殊バフ系
@@ -268,14 +275,18 @@ interface Buff {
 
 #### 気・計略系
 
-| 旧type | 旧unit | → Reborn Stat | costType | BuffMode | 備考 |
-|--------|--------|---------------|----------|----------|------|
-| 自然気 | `+` | `cost` | `natural` | `flat_sum` | |
-| 気(牛) | `+` | `cost` | `enemy_defeat` | `flat_sum` | |
-| 気(ノビ) | `+` | `cost` | `ally_defeat` | `flat_sum` | |
-| 気軽減 | `+%` | `cost` | `giant_cost` | `percent_reduction` | |
-| 計略消費気 | `+` | `cost` | `strategy_cost` | `flat_sum` | 固定値多い |
-| 計略短縮 | `+%` | `strategy_cooldown` | - | `percent_reduction` | |
+**注意**: 気バフは種類ごとに専用のStatを使用します（v2.1で変更）
+
+| パターン | → Reborn Stat | BuffMode | 備考 |
+|---------|---------------|----------|------|
+| 自然に気が増加 | `cost` | `percent_max` | 40%（増加）/70%（大きく増加） |
+| 徐々に気がN増加 | `cost_gradual` | `flat_sum` | 時間経過・巨大化毎など |
+| 敵撃破時の獲得気 | `cost_enemy_defeat` | `flat_sum` | 気(牛) - テキストに「敵」含む |
+| 撃破獲得気N増加 | `cost_defeat_bonus` | `flat_sum` | 気(ノビ) - テキストに「敵」含まない |
+| 巨大化気N%軽減 | `cost_giant` | `percent_reduction` | %軽減は巨大化気のみ対象 |
+| 消費気がN軽減 | `cost_giant` | `flat_sum` | 固定値は両方対象 |
+| 計略消費気 | `cost_strategy` | `flat_sum` | |
+| 計略短縮 | `strategy_cooldown` | `percent_reduction` | |
 
 #### その他
 
@@ -819,7 +830,58 @@ describe('calcBuffMatrix with real data', () => {
 
 ---
 
-## 9. 変更履歴
+## 9. Wikiパーサーの実装知見
+
+### 9.1 特殊能力 vs 特殊攻撃
+
+Wikiには「特殊能力」と「特殊攻撃」という別々のセクションが存在します。
+
+- **特殊能力**: パッシブスキル（気(牛)などが含まれる）
+- **特殊攻撃**: アクティブスキル（ストック消費攻撃など）
+
+パーサーは特殊攻撃セクションを除外し、特殊能力のみを抽出します。
+
+### 9.2 効果重複の位置ベース判定
+
+「(同種効果と重複)」のような表記は、**その表記より前のバフにのみ適用**されます。
+
+```
+例: 攻撃1.2倍(同種効果と重複)被ダメージ1.5倍(自分のみ)
+→ 攻撃1.2倍: isDuplicate = true
+→ 被ダメージ1.5倍: isDuplicate = false（効果重複より後ろなので）
+```
+
+### 9.3 並列表記の展開順序
+
+「攻撃と攻撃速度」のような並列表記を展開する際、**長いパターンを先にマッチ**させます。
+
+```typescript
+const statPattern = '攻撃速度|移動速度|攻撃(?:力)?|防御(?:力)?|射程|...';
+// 「攻撃速度」を「攻撃」より先に定義することで誤マッチを防止
+```
+
+### 9.4 徐々気パターンの厳格化
+
+以下のような誤検知を防ぐため、徐々気パターンは厳格に定義します:
+
+```
+❌ 誤検知: 「時間経過でも蓄積...獲得気が2増加」
+   → 「時間経過で」と「獲得気が2」が離れていてもマッチしてしまう
+
+✓ 正しいパターン: 時間経過で気が(?:徐々に)?(\d+)(?:増加|回復)
+   → 「時間経過で気が」が直接続く場合のみマッチ
+```
+
+---
+
+## 10. 変更履歴
+
+### v2.1 (2025-12-14)
+- 気バフを種類ごとに専用Statに分離（cost_gradual, cost_giant, cost_enemy_defeat, cost_defeat_bonus, cost_strategy）
+- 敵の被ダメ/与ダメ関連Stat追加（enemy_damage_taken, enemy_damage_dealt）
+- enemy_knockback を enemy_retreat に変更
+- Wikiパーサーの実装知見セクションを追加
+- 効果重複の位置ベース判定仕様を追加
 
 ### v2.0 (2025-12-07)
 - Targetの6種類を明記（self, ally, range, all, field, out_of_range）
@@ -838,5 +900,5 @@ describe('calcBuffMatrix with real data', () => {
 
 ---
 
-*Last Updated: 2025-12-07*  
-*Version: 2.0*
+*Last Updated: 2025-12-14*
+*Version: 2.1*
