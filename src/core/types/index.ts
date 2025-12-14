@@ -9,6 +9,11 @@ export type AllyBuffStat =
     | 'attack_gap'
     | 'recovery'
     | 'cost'
+    | 'cost_gradual'        // 徐々気
+    | 'cost_giant'          // 気軽減（巨大化消費気軽減）
+    | 'cost_strategy'       // 計略消費気軽減
+    | 'cost_enemy_defeat'   // 気牛（敵へのデバフ：その敵を倒すと気増加）
+    | 'cost_defeat_bonus'   // 気ノビ（自身/味方へのバフ：そのキャラが敵を倒すと気増加）
     | 'strategy_cooldown'
     | 'target_count'
     | 'attack_count';
@@ -157,7 +162,7 @@ export interface Character {
     id: string;
     name: string;
     imageUrl?: string; // 画像URL
-    rarity?: number; // レアリティ
+    rarity?: string; // レアリティ (☆7, 曉 etc.)
     period?: string; // [絢爛] etc.
     seasonAttributes?: string[]; // 夏/絢爛/ハロウィン/学園/聖夜/正月/お月見/花嫁
     type?: 'castle_girl' | 'ambush' | 'lord'; // デフォルトは城娘

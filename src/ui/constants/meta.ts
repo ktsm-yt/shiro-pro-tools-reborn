@@ -26,6 +26,11 @@ const WEAPON_META: Record<string, { icon: string; name: string; range: 'melee' |
   '槌': { icon: '🔨', name: '槌', range: 'melee' },
   '拳': { icon: '👊', name: '拳', range: 'melee' },
   '剣': { icon: '⚔️', name: '剣', range: 'melee' },
+  '盾': { icon: '🛡️', name: '盾', range: 'melee' },
+  '鎌': { icon: '⚔️', name: '鎌', range: 'melee' },
+  '戦棍': { icon: '🏏', name: '戦棍', range: 'melee' },
+  '双剣': { icon: '⚔️', name: '双剣', range: 'melee' },
+  'ランス': { icon: '🗡️', name: 'ランス', range: 'melee' },
   '弓': { icon: '🏹', name: '弓', range: 'ranged' },
   '鉄砲': { icon: '🔫', name: '鉄砲', range: 'ranged' },
   '銃': { icon: '🔫', name: '銃', range: 'ranged' },
@@ -35,6 +40,14 @@ const WEAPON_META: Record<string, { icon: string; name: string; range: 'melee' |
   '鈴': { icon: '🔔', name: '鈴', range: 'ranged' },
   '本': { icon: '📖', name: '本', range: 'ranged' },
   '鈴杖': { icon: '🔔', name: '鈴杖', range: 'ranged' },
+  '法術': { icon: '✨', name: '法術', range: 'ranged' },
+  '祓串': { icon: '📿', name: '祓串', range: 'ranged' },
+  '投剣': { icon: '🗡️', name: '投剣', range: 'ranged' },
+  '鞭': { icon: '〰️', name: '鞭', range: 'melee' },
+  '大砲': { icon: '💣', name: '大砲', range: 'ranged' },
+  '陣貝': { icon: '🐚', name: '陣貝', range: 'ranged' },
+  '茶器': { icon: '🍵', name: '茶器', range: 'melee' },
+  '軍船': { icon: '⛵', name: '軍船', range: 'ranged' },
 };
 
 export function resolveAttributeKey(attributeText?: string): AttributeKey {

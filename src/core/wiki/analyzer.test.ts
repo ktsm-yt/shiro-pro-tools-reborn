@@ -133,6 +133,58 @@ describe('analyzeBuffText', () => {
             });
         });
     });
+
+    describe('並列表記の展開', () => {
+        it('should expand "攻撃と防御が30%上昇" into 2 separate buffs', () => {
+            const result = analyzeBuffText('攻撃と防御が30%上昇');
+            expect(result).toHaveLength(2);
+            expect(result.find(b => b.stat === 'attack')).toMatchObject({
+                stat: 'attack',
+                mode: 'percent_max',
+                value: 30,
+            });
+            expect(result.find(b => b.stat === 'defense')).toMatchObject({
+                stat: 'defense',
+                mode: 'percent_max',
+                value: 30,
+            });
+        });
+
+        it('should expand "防御・移動速度が20%低下" into 2 separate buffs', () => {
+            const result = analyzeBuffText('敵の防御・移動速度が20%低下');
+            expect(result.length).toBeGreaterThanOrEqual(2);
+            expect(result.find(b => b.stat === 'enemy_defense')).toBeTruthy();
+            expect(result.find(b => b.stat === 'enemy_movement')).toBeTruthy();
+        });
+
+        it('should expand "射程内の城娘の攻撃と防御が1.2倍" with target range', () => {
+            const result = analyzeBuffText('射程内の城娘の攻撃と防御が1.2倍');
+            expect(result).toHaveLength(2);
+            expect(result.every(b => b.target === 'range')).toBe(true);
+            expect(result.find(b => b.stat === 'attack')?.value).toBeCloseTo(20, 1); // (1.2-1)*100
+            expect(result.find(b => b.stat === 'defense')?.value).toBeCloseTo(20, 1);
+        });
+
+        it('should expand "攻撃と攻撃速度10%上昇" into attack and attack_speed (暁星大坂)', () => {
+            const result = analyzeBuffText('攻撃と攻撃速度10%上昇');
+            expect(result.length).toBeGreaterThanOrEqual(2);
+            expect(result.find(b => b.stat === 'attack')).toMatchObject({
+                stat: 'attack',
+                value: 10,
+            });
+            expect(result.find(b => b.stat === 'attack_speed')).toMatchObject({
+                stat: 'attack_speed',
+                value: 10,
+            });
+        });
+
+        it('should parse "巨大化毎に射程内城娘の攻撃と攻撃速度10%上昇" with ×5 multiplier', () => {
+            const result = analyzeBuffText('巨大化毎に射程内城娘の攻撃と攻撃速度10%上昇');
+            expect(result.length).toBeGreaterThanOrEqual(2);
+            expect(result.find(b => b.stat === 'attack')?.value).toBe(50); // 10 × 5
+            expect(result.find(b => b.stat === 'attack_speed')?.value).toBe(50); // 10 × 5
+        });
+    });
 });
 
 describe('analyzeCharacter', () => {
@@ -185,4 +237,172 @@ describe('analyzeCharacter', () => {
     });
 
     // 他 stat は今後の拡張で追加
+});
+
+describe('気関連パターン', () => {
+    // 自然気テスト
+    it('should parse "自然に気が増加" as cost 40%', () => {
+        const result = analyzeBuffText('自然に気が増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost',
+            mode: 'percent_max',
+            value: 40,
+        });
+    });
+
+    it('should parse "自然に気が大きく増加" as cost 70%', () => {
+        const result = analyzeBuffText('自然に気が大きく増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost',
+            mode: 'percent_max',
+            value: 70,
+        });
+    });
+
+    // 気軽減%テスト（巨大化気のみ対象）
+    it('should parse "巨大化に必要な気が15%軽減" as cost_giant percent', () => {
+        const result = analyzeBuffText('巨大化に必要な気が15%軽減');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_giant',
+            mode: 'percent_reduction',
+            value: 15,
+        });
+    });
+
+    it('should parse "巨大化に必要な気を半減" as cost_giant 50%', () => {
+        const result = analyzeBuffText('巨大化に必要な気を半減');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_giant',
+            mode: 'percent_reduction',
+            value: 50,
+        });
+    });
+
+    // 気軽減-テスト（固定値: 消費気・巨大化気 両方対象）
+    it('should parse "消費気が2軽減" as cost_giant flat', () => {
+        const result = analyzeBuffText('消費気が2軽減');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_giant',
+            mode: 'flat_sum',
+            value: 2,
+        });
+    });
+
+    it('should parse "巨大化に必要な気が3軽減" as cost_giant flat', () => {
+        const result = analyzeBuffText('巨大化に必要な気が3軽減');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_giant',
+            mode: 'flat_sum',
+            value: 3,
+        });
+    });
+
+    // 徐々気テスト（複数の表記揺れ対応）
+    it('should parse "徐々に気が3回復" as cost_gradual', () => {
+        const result = analyzeBuffText('徐々に気が3回復');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_gradual',
+            mode: 'flat_sum',
+            value: 3,
+        });
+    });
+
+    it('should parse "10秒ごとに気が2増加" as cost_gradual', () => {
+        const result = analyzeBuffText('10秒ごとに気が2増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_gradual',
+            mode: 'flat_sum',
+            value: 2,
+        });
+    });
+
+    it('should parse "時間経過で気が徐々に3増加" as cost_gradual', () => {
+        const result = analyzeBuffText('時間経過で気が徐々に3増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_gradual',
+            mode: 'flat_sum',
+            value: 3,
+        });
+    });
+
+    it('should parse "巨大化するごとに気が1増加" as cost_gradual (×5 for max giant)', () => {
+        const result = analyzeBuffText('巨大化するごとに気が1増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_gradual',
+            mode: 'flat_sum',
+            value: 5,  // 1 × 5回巨大化 = 5
+        });
+    });
+
+    it('should parse "時間経過で気が徐々に増加" as cost_gradual with default value 2', () => {
+        const result = analyzeBuffText('時間経過で気が徐々に増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_gradual',
+            mode: 'flat_sum',
+            value: 2,  // 5秒毎に2増加（デフォルト）
+        });
+    });
+
+    it('should parse "5秒毎に2増加" as cost_gradual', () => {
+        const result = analyzeBuffText('5秒毎に気が2増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_gradual',
+            mode: 'flat_sum',
+            value: 2,
+        });
+    });
+
+    // 気(牛)テスト
+    it('should parse "敵撃破時の獲得気が2増加" as cost_enemy_defeat (気牛) - contains 敵', () => {
+        const result = analyzeBuffText('敵撃破時の獲得気が2増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_enemy_defeat',
+            mode: 'flat_sum',
+            value: 2,
+        });
+    });
+
+    it('should parse "自身の敵撃破時の獲得気が2増加" as cost_enemy_defeat (暁星大坂)', () => {
+        const result = analyzeBuffText('自身の敵撃破時の獲得気が2増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_enemy_defeat',
+            mode: 'flat_sum',
+            value: 2,
+        });
+    });
+
+    // 気(ノビ)テスト
+    it('should parse "射程内の城娘の撃破気が1増加" as cost_defeat_bonus (気ノビ) - no 敵', () => {
+        const result = analyzeBuffText('射程内の城娘の撃破気が1増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_defeat_bonus',
+            mode: 'flat_sum',
+            value: 1,
+        });
+    });
+
+    it('should parse "撃破獲得気2増加" as cost_defeat_bonus (気ノビ) - no 敵', () => {
+        const result = analyzeBuffText('撃破獲得気2増加');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'cost_defeat_bonus',
+            mode: 'flat_sum',
+            value: 2,
+        });
+    });
 });

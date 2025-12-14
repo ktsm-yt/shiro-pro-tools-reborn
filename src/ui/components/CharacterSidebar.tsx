@@ -137,9 +137,11 @@ export function CharacterSidebar({
                       {/* Content */}
                       {!collapsed && (
                         <div className="w-full flex flex-col items-center pt-2">
-                          {/* Replace text with icon representation if available, or just keep compact text */}
                           <div className="text-xs font-bold text-gray-200 truncate w-full px-1 mb-0.5">{char.name}</div>
-                          <div className="text-[10px] text-gray-500 truncate w-full px-1">{char.weapon}</div>
+                          <div className="text-[10px] text-gray-500 truncate w-full px-1">
+                            {char.rarity && <span className="mr-1">{char.rarity}</span>}
+                            {char.weapon}
+                          </div>
                         </div>
                       )}
 

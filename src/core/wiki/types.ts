@@ -3,6 +3,7 @@ export interface RawCharacterData {
     period?: string; // [絢爛] etc.
     url: string;
     imageUrl?: string;
+    rarity?: string; // ☆7, 曉 etc.
     weapon: string;
     weaponRange?: '近' | '遠' | '遠近';
     weaponType?: '物' | '術';

@@ -48,11 +48,26 @@ export function CharacterModal({ character, isOpen, onClose, currentBuffs }: Cha
             ✕
           </button>
           <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl border ${meta.border} ${meta.light}`}>
-              {weapon.icon}
-            </div>
+            {/* Character Image or Weapon Icon */}
+            {character.imageUrl ? (
+              <img
+                src={character.imageUrl}
+                alt={character.name}
+                className={`w-14 h-14 object-cover rounded-xl border-2 ${meta.border}`}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl border ${meta.border} ${meta.light}`}>
+                {weapon.icon}
+              </div>
+            )}
             <div>
-              <div className="text-sm text-gray-300">{meta.label}・{weapon.name}</div>
+              <div className="text-sm text-gray-300">
+                {character.rarity && <span className="mr-2">{character.rarity}</span>}
+                {meta.label}・{weapon.name}
+              </div>
               <h3 className="text-2xl font-bold leading-tight">{character.name}</h3>
             </div>
           </div>

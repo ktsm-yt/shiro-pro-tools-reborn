@@ -10,6 +10,11 @@ export type VisualBuffSource = {
   isDuplicate?: boolean;
   isSelfOnly?: boolean;      // target='self' のバフか（自分だけに適用）
   requiresAmbush?: boolean;  // 伏兵条件
+  // 動的バフ情報
+  isDynamic?: boolean;
+  dynamicType?: string;      // 'per_ally_other', 'per_enemy_in_range', etc.
+  dynamicParameter?: string; // "味方1体につき" などの説明
+  unitValue?: number;        // 単位あたりの値
 };
 export type VisualBuffCell = {
   maxValue: number;           // %バフの最大値（トータル）
@@ -24,14 +29,20 @@ export type VisualBuffCell = {
   duplicateFlat: number;      // 効果重複固定値
   selfExtraFlat: number;      // 自分だけの追加固定値
 
+  // 同キャラ内スタック用（徐々気など）: 特技(青)+計略(紫)を合算
+  selfStackValue: number;     // 特技由来の合算値（青）
+  strategyStackValue: number; // 計略由来の合算値（紫）
+
   hasSelf: boolean;           // 自分由来のバフがあるか（バッジ用）
   hasAlly: boolean;           // 味方由来のバフがあるか（バッジ用）
   hasStrategy: boolean;       // 計略由来のバフがあるか（バッジ用）
   hasDuplicate: boolean;      // 効果重複バフがあるか（バッジ用）
   hasAmbush: boolean;         // 伏兵条件バフがあるか（バッジ用）
+  hasDynamic: boolean;        // 動的バフがあるか（バッジ用）
   hasSelfFlat: boolean;       // 自分由来の固定値バフがあるか
   hasAllyFlat: boolean;       // 味方由来の固定値バフがあるか
   hasStrategyFlat: boolean;   // 計略由来の固定値バフがあるか
+  dynamicSources: VisualBuffSource[]; // 動的バフのソース（ツールチップ表示用）
   sources: VisualBuffSource[];
 };
 export type VisualBuffMatrix = Record<string, Partial<Record<Stat, VisualBuffCell>>>;
@@ -39,7 +50,11 @@ export type VisualBuffMatrix = Record<string, Partial<Record<Stat, VisualBuffCel
 export const VISUAL_STAT_KEYS: Stat[] = [
   // 気・計略
   'cost',
-  'cooldown',
+  'cost_gradual',
+  'cost_enemy_defeat',
+  'cost_defeat_bonus',
+  'cost_giant',
+  'cost_strategy',
   'strategy_cooldown',
   // 攻撃系
   'attack',
@@ -72,7 +87,10 @@ export const VISUAL_STAT_KEYS: Stat[] = [
 ];
 
 // 固定値として別表示するstat（%とは別に表示）
-export const FLAT_STAT_KEYS: Stat[] = ['attack', 'defense', 'range'];
+export const FLAT_STAT_KEYS: Stat[] = ['attack', 'defense', 'range', 'cost_giant'];
+
+// 同キャラ内で合算するstat（特技+計略がスタック）
+export const SELF_STACKABLE_STATS: Stat[] = ['cost_gradual'];
 
 /**
  * UI表示用にバフの内訳を収集する
@@ -84,6 +102,7 @@ export function buildVisualBuffMatrix(
 ): VisualBuffMatrix {
   const tracked = new Set<Stat>(trackedStats);
   const flatStats = new Set<Stat>(FLAT_STAT_KEYS);
+  const selfStackable = new Set<Stat>(SELF_STACKABLE_STATS);
   const result: VisualBuffMatrix = {};
 
   const activeChars = formation.slots.filter((c): c is Character => Boolean(c));
@@ -95,8 +114,10 @@ export function buildVisualBuffMatrix(
         maxValue: 0, maxFlat: 0,
         sharedValue: 0, duplicateValue: 0, selfExtra: 0,
         sharedFlat: 0, duplicateFlat: 0, selfExtraFlat: 0,
-        hasSelf: false, hasAlly: false, hasStrategy: false, hasDuplicate: false, hasAmbush: false,
+        selfStackValue: 0, strategyStackValue: 0,
+        hasSelf: false, hasAlly: false, hasStrategy: false, hasDuplicate: false, hasAmbush: false, hasDynamic: false,
         hasSelfFlat: false, hasAllyFlat: false, hasStrategyFlat: false,
+        dynamicSources: [],
         sources: []
       };
     });
@@ -135,8 +156,20 @@ export function buildVisualBuffMatrix(
         const isDuplicate = buff.isDuplicate === true;
         const isSelfOnly = buff.target === 'self';  // target='self' は自分だけに適用
         const requiresAmbush = buff.requiresAmbush === true;
+        const isDynamic = buff.isDynamic === true;
+        const isSelfStackable = selfStackable.has(buff.stat);
 
-        if (isFlat) {
+        // 同キャラ内スタック（徐々気など）: 特技+計略を合算
+        if (isSelfStackable && sourceChar.id === targetChar.id) {
+          if (type === 'self') {
+            cell.selfStackValue += buff.value;
+            cell.hasSelf = true;
+          } else if (type === 'strategy') {
+            cell.strategyStackValue += buff.value;
+            cell.hasStrategy = true;
+          }
+          cell.maxValue = cell.selfStackValue + cell.strategyStackValue;
+        } else if (isFlat) {
           // 固定値バフ
           cell.maxFlat = Math.max(cell.maxFlat, buff.value);
           if (type === 'self') cell.hasSelfFlat = true;
@@ -152,8 +185,9 @@ export function buildVisualBuffMatrix(
 
         if (isDuplicate) cell.hasDuplicate = true;
         if (requiresAmbush) cell.hasAmbush = true;
+        if (isDynamic) cell.hasDynamic = true;
 
-        cell.sources.push({
+        const source: VisualBuffSource = {
           from: sourceChar.name,
           value: buff.value,
           type,
@@ -162,7 +196,16 @@ export function buildVisualBuffMatrix(
           isDuplicate,
           isSelfOnly,
           requiresAmbush,
-        });
+          isDynamic,
+          dynamicType: buff.dynamicType,
+          dynamicParameter: buff.dynamicParameter,
+          unitValue: buff.unitValue,
+        };
+
+        cell.sources.push(source);
+        if (isDynamic) {
+          cell.dynamicSources.push(source);
+        }
       });
     });
   });

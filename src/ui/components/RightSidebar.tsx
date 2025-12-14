@@ -148,10 +148,22 @@ export function RightSidebar({
                             <div className="space-y-5">
                                 {/* キャラヘッダー */}
                                 <div className="text-center pb-4 border-b border-gray-800">
-                                    <div className="text-3xl mb-2">{getWeaponMeta(selectedChar.weapon).icon}</div>
+                                    {selectedChar.imageUrl ? (
+                                        <img
+                                            src={selectedChar.imageUrl}
+                                            alt={selectedChar.name}
+                                            className="w-16 h-16 object-cover rounded-xl border-2 border-gray-700 mx-auto mb-2"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="text-3xl mb-2">{getWeaponMeta(selectedChar.weapon).icon}</div>
+                                    )}
                                     <div className="text-base font-bold text-white mb-1">{selectedChar.name}</div>
                                     <div className="text-xs text-gray-400 bg-gray-800/50 inline-block px-2 py-0.5 rounded-full">
-                                        {getWeaponMeta(selectedChar.weapon).name} ・ ☆{selectedChar.rarity}
+                                        {getWeaponMeta(selectedChar.weapon).name}
+                                        {selectedChar.rarity && <span> ・ {selectedChar.rarity}</span>}
                                     </div>
                                 </div>
 

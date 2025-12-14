@@ -13,9 +13,14 @@ type StatRow = { key: Stat; name: string; icon: string; isFlat?: boolean };
 const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow[] }[] = [
   {
     key: 'resource', name: '気・計略', icon: '⚡', stats: [
-      { key: 'cost', name: '気', icon: '⚡' },
-      { key: 'cooldown', name: '計略短縮', icon: '⏱' },
-      { key: 'strategy_cooldown', name: '計略CT', icon: '⏱' },
+      { key: 'cost', name: '自然気', icon: '⚡' },
+      { key: 'cost_gradual', name: '徐々気', icon: '💧' },
+      { key: 'cost_enemy_defeat', name: '気(牛)', icon: '🐄' },
+      { key: 'cost_defeat_bonus', name: '気(ノビ)', icon: '🌱' },
+      { key: 'cost_giant', name: '気軽減%', icon: '💨' },
+      { key: 'cost_giant', name: '気軽減-', icon: '💨', isFlat: true },
+      { key: 'cost_strategy', name: '計略気-', icon: '📜' },
+      { key: 'strategy_cooldown', name: '計略短縮', icon: '⏱' },
     ]
   },
   {
@@ -70,7 +75,7 @@ const PERCENT_STATS = new Set<Stat>([
   'attack', 'defense', 'range',
   'damage_dealt', 'give_damage', 'damage_taken', 'enemy_damage_taken', 'damage_recovery', 'critical_bonus',
   'attack_speed', 'attack_gap',
-  'cooldown', 'strategy_cooldown',
+  'strategy_cooldown', 'cost_giant',
   'enemy_defense', 'enemy_defense_ignore_percent', 'enemy_attack', 'enemy_movement', 'enemy_range',
   'inspire',
 ]);
@@ -86,6 +91,17 @@ const CategoryHeader = ({ name, icon, expanded, toggle }: { name: string; icon: 
   </button>
 );
 
+// 動的バフのタイプを日本語に変換
+const DYNAMIC_TYPE_LABELS: Record<string, string> = {
+  'per_ally_other': '味方1体につき',
+  'per_ally_in_range': '射程内味方1体につき',
+  'per_enemy_in_range': '射程内敵1体につき',
+  'per_ambush_deployed': '配置伏兵1体につき',
+  'per_enemy_defeated': '敵撃破毎に',
+  'per_specific_attribute': '特定属性の城娘毎に',
+  'per_specific_weapon': '特定武器種の城娘毎に',
+};
+
 const BuffDots = ({ cell, isFlat }: { cell: VisualBuffCell; isFlat?: boolean }) => {
   const value = isFlat ? cell.maxFlat : cell.maxValue;
   const hasSelf = isFlat ? cell.hasSelfFlat : cell.hasSelf;
@@ -93,6 +109,14 @@ const BuffDots = ({ cell, isFlat }: { cell: VisualBuffCell; isFlat?: boolean }) 
   const hasStrategy = isFlat ? cell.hasStrategyFlat : cell.hasStrategy;
   const hasDuplicate = cell.hasDuplicate;
   const hasAmbush = cell.hasAmbush;
+  const hasDynamic = cell.hasDynamic;
+
+  // 動的バフのツールチップを生成
+  const dynamicTooltip = cell.dynamicSources?.map(src => {
+    const typeLabel = src.dynamicType ? DYNAMIC_TYPE_LABELS[src.dynamicType] || src.dynamicType : '';
+    const paramLabel = src.dynamicParameter || typeLabel;
+    return `${src.from}: ${paramLabel} +${src.unitValue ?? src.value}%`;
+  }).join('\n') || '';
 
   if (value === 0) return <span className="text-gray-600 text-xs">—</span>;
   return (
@@ -102,6 +126,12 @@ const BuffDots = ({ cell, isFlat }: { cell: VisualBuffCell; isFlat?: boolean }) 
       {hasDuplicate && <span className="w-2.5 h-2.5 rounded-full bg-yellow-500" title="効果重複" />}
       {hasStrategy && <span className="w-2.5 h-2.5 rounded-full bg-purple-500" title="計略" />}
       {hasAmbush && <span className="w-2.5 h-2.5 rounded-full bg-orange-500" title="伏兵" />}
+      {hasDynamic && (
+        <span
+          className="w-2.5 h-2.5 rounded-full bg-cyan-500 cursor-help"
+          title={`動的バフ\n${dynamicTooltip}`}
+        />
+      )}
     </div>
   );
 };

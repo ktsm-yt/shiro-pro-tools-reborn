@@ -89,6 +89,7 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
         id: `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: rawData.name,
         imageUrl: rawData.imageUrl,
+        rarity: rawData.rarity,
         period: rawData.period,
         seasonAttributes,
         type: 'castle_girl',
