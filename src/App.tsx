@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import type { Character, Formation } from './core/types';
-import { MOCK_CHARS } from './core/mock/data';
 import { CharacterSidebar } from './ui/components/CharacterSidebar';
 import { FormationSlot } from './ui/components/FormationSlot';
 import { BuffMatrix } from './ui/components/BuffMatrix';
@@ -39,26 +38,23 @@ export default function App() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isLoadMenuOpen, setIsLoadMenuOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [isDeleteCharacterConfirmOpen, setIsDeleteCharacterConfirmOpen] = useState(false);
+  const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
 
   const loadMenuRef = useRef<HTMLDivElement | null>(null);
   const isSessionRestoredRef = useRef(false);
 
   // Persistence Hooks
-  const { savedCharacters, addCharacter: saveCharacter } = useCharacterStorage();
+  const { savedCharacters, addCharacter: saveCharacter, removeCharacter: deleteCharacterFromStorage } = useCharacterStorage();
   const { savedFormations, saveFormation: saveFormationToStorage, deleteFormation: deleteFormationFromStorage } = useFormationStorage();
 
   // Environment & Calc
   const { settings: env, setSettings: setEnv, reset: resetEnv } = useEnvironmentSettings();
 
-  // Combine Mock + Saved Characters
-  // Memoize to avoid reflows
-  const allCharacters = useMemo(() => {
-    // Deduplicate by ID just in case
-    const map = new Map<string, Character>();
-    MOCK_CHARS.forEach(c => map.set(c.id, c));
-    savedCharacters.forEach(c => map.set(c.id, c));
-    return Array.from(map.values());
-  }, [savedCharacters]);
+  // All characters from storage
+  const allCharacters = useMemo(() => savedCharacters, [savedCharacters]);
+
+  const savedCharacterIds = useMemo(() => new Set(savedCharacters.map(c => c.id)), [savedCharacters]);
 
   // Load last formation on mount (Auto-load)
   useEffect(() => {
@@ -68,10 +64,9 @@ export default function App() {
       try {
         const slotIds = JSON.parse(savedSlotsJson) as (string | null)[];
 
-        // Hydrate from both Mock and Storage
+        // Hydrate from storage
         const chars = loadCharacters();
         const map = new Map<string, Character>();
-        MOCK_CHARS.forEach(c => map.set(c.id, c));
         chars.forEach(c => map.set(c.id, c));
 
         const finalSlots = slotIds.map(id => {
@@ -83,7 +78,7 @@ export default function App() {
         console.error("Failed to auto-load slots", e);
       }
     }
-  }, []); // Run once. Dependency on MOCK_CHARS is constant.
+  }, []);
 
   // Auto-save slots
   useEffect(() => {
@@ -173,6 +168,27 @@ export default function App() {
       }
       return { ...prev, slots };
     });
+  };
+
+  const requestDeleteCharacter = (character: Character) => {
+    if (!savedCharacterIds.has(character.id)) return;
+    setCharacterToDelete(character);
+    setIsDeleteCharacterConfirmOpen(true);
+  };
+
+  const closeDeleteCharacterConfirm = () => {
+    setIsDeleteCharacterConfirmOpen(false);
+    setCharacterToDelete(null);
+  };
+
+  const confirmDeleteCharacter = () => {
+    if (!characterToDelete) return;
+
+    deleteCharacterFromStorage(characterToDelete.id);
+    removeCharacter(characterToDelete.id); // Remove from current formation if present
+    if (selectedCharacter?.id === characterToDelete.id) setSelectedCharacter(null);
+
+    closeDeleteCharacterConfirm();
   };
 
   const clearFormation = () => {
@@ -393,6 +409,8 @@ export default function App() {
           collapsed={isLeftSidebarCollapsed}
           onToggle={() => setIsLeftSidebarCollapsed(prev => !prev)}
           onSelect={addCharacter}
+          savedCharacterIds={savedCharacterIds}
+          onDelete={requestDeleteCharacter}
         />
 
         {/* Center Content */}
@@ -480,6 +498,19 @@ export default function App() {
         confirmLabel="クリアする"
         onConfirm={clearFormation}
         onClose={() => setIsClearConfirmOpen(false)}
+      />
+
+      <ConfirmModal
+        isOpen={isDeleteCharacterConfirmOpen}
+        title="登録キャラを削除しますか？"
+        description={
+          characterToDelete
+            ? `「${characterToDelete.name}」を一覧と保存データから削除します。編成中の場合は自動で外れます。保存済み編成に含まれている場合、読み込み時に空欄になります。`
+            : undefined
+        }
+        confirmLabel="削除する"
+        onConfirm={confirmDeleteCharacter}
+        onClose={closeDeleteCharacterConfirm}
       />
 
       {/* Legacy Modal (Optionally used) */}

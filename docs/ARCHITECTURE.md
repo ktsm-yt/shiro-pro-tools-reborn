@@ -761,7 +761,9 @@ describe('calcBuffMatrix with real data', () => {
 - **ARCHITECTURE.md（本ドキュメント）** - プロジェクト全体の設計書
 - **TYPE_CONVERSION_MAPPING.md** - 型変換の完全な仕様
 - **CONDITION_TAG_SPEC.md** - 条件タグの完全な定義
-- **PARSING_RULES.md** - Wikiテキスト解析の23個のパターン
+- **PARSING_RULES.md** - Wikiテキスト解析のコア仕様（パターン1〜10）
+- **PARSING_RULES_ADVANCED.md** - 高度なパターン（パターン11〜23）
+- **WIKI_PARSER_GUIDE.md** - Wikiパーサー実装知見とバージョン履歴
 - **DAMAGE_CALCULATOR_SPEC.md** - ダメージ計算式の詳細仕様
 
 ---
