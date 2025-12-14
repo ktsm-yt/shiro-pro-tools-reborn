@@ -187,31 +187,31 @@ describe('storage', () => {
 
     describe('Environment', () => {
         const defaultEnv: EnvironmentSettings = {
-            inspire: 0,
+            inspireFlat: 0,
+            duplicateBuff: 0,
             attackPercent: 0,
-            defensePercent: 0,
-            damageDealtPercent: 0,
-            damageTakenPercent: 0,
-            rangeFlat: 0,
-            cooldownPercent: 0,
-            attackSpeedPercent: 0,
-            kiGainPercent: 0,
+            damageDealt: 0,
+            damageMultiplier: 1,
+            attackSpeed: 0,
+            gapReduction: 0,
             enemyDefense: 0,
-            enemyDamageDealtPercent: 0,
-            enemyDamageTakenPercent: 0,
+            defenseDebuffPercent: 0,
+            defenseDebuffFlat: 0,
+            damageTaken: 0,
+            enemyHpPercent: 100,
         };
 
         it('should save and load environment settings', () => {
             const customEnv: EnvironmentSettings = {
                 ...defaultEnv,
-                inspire: 100,
+                inspireFlat: 100,
                 attackPercent: 50,
             };
 
             saveEnvironment(customEnv);
             const loaded = loadEnvironment(defaultEnv);
 
-            expect(loaded.inspire).toBe(100);
+            expect(loaded.inspireFlat).toBe(100);
             expect(loaded.attackPercent).toBe(50);
         });
 

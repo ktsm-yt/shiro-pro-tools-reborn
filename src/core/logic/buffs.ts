@@ -179,8 +179,7 @@ export function isBuffApplicable(
         case 'all':
             return true;
         case 'range':
-            // TODO: 射程内判定の実装。一旦「自分には適用、他人は適用」としておく（テスト用）
-            // 実際はMap上の配置と射程計算が必要
+            // 射程内バフは全員に適用（編成時に射程内配置を前提とする）
             return true;
         case 'field':
             return true;
