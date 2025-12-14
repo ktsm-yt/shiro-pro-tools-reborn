@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character } from '../../core/types';
 import { ATTRIBUTE_META, getAttributeMeta } from '../constants/meta';
+import { Trash2 } from 'lucide-react';
 
 const ATTRIBUTE_ORDER: Array<keyof typeof ATTRIBUTE_META> = [
   'plain',
@@ -17,6 +18,8 @@ interface CharacterSidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   onSelect: (character: Character) => void;
+  savedCharacterIds?: ReadonlySet<string>;
+  onDelete?: (character: Character) => void;
 }
 
 export function CharacterSidebar({
@@ -25,6 +28,8 @@ export function CharacterSidebar({
   collapsed,
   onToggle,
   onSelect,
+  savedCharacterIds,
+  onDelete,
 }: CharacterSidebarProps) {
   const [query, setQuery] = useState('');
 
@@ -89,19 +94,45 @@ export function CharacterSidebar({
               <div className="grid grid-cols-2 gap-2">
                 {chars.map((char) => {
                   const isInFormation = formationIds.includes(char.id);
+                  const isDeletable = Boolean(onDelete && savedCharacterIds?.has(char.id));
                   const attrMeta = getAttributeMeta(char).meta;
                   return (
-                    <button
+                    <div
                       key={char.id}
+                      role="button"
+                      tabIndex={!isInFormation ? 0 : -1}
+                      aria-disabled={isInFormation}
                       onClick={() => !isInFormation && onSelect(char)}
+                      onKeyDown={(e) => {
+                        if (isInFormation) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelect(char);
+                        }
+                      }}
                       title={char.name}
                       className={`relative flex flex-col items-center p-2 rounded-xl border text-center transition-all group ${collapsed
                           ? 'border-transparent bg-transparent'
                           : 'border-[#1f2a3d] bg-[#131b2b] hover:border-[#2c3a52] hover:bg-[#1a2436]'
-                        } ${isInFormation ? 'opacity-40 cursor-not-allowed grayscale' : 'hover:-translate-y-0.5'}`}
+                        } ${isInFormation ? 'opacity-40 cursor-not-allowed grayscale' : 'hover:-translate-y-0.5 cursor-pointer'}`}
                     >
                       {/* Status Dot */}
                       <span className={`absolute top-2 left-2 w-2 h-2 rounded-full ${attrMeta.dot}`} />
+
+                      {/* Delete Button (Saved Characters Only) */}
+                      {!collapsed && isDeletable && (
+                        <button
+                          type="button"
+                          title="登録キャラを削除"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete?.(char);
+                          }}
+                          className="absolute top-1.5 right-1.5 z-10 p-1 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-950/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
 
                       {/* Content */}
                       {!collapsed && (
@@ -114,11 +145,11 @@ export function CharacterSidebar({
 
                       {/* Formation Indicator (Icon overlay instead of large tag) */}
                       {!collapsed && isInFormation && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-[1px]">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl backdrop-blur-[1px] pointer-events-none">
                           <span className="text-[10px] font-bold text-white bg-green-600/90 px-2 py-0.5 rounded-full">編成中</span>
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>

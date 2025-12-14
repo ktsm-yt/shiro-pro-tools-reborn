@@ -44,7 +44,7 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
     };
 
     ['夏', '絢爛', 'ハロウィン', '学園', '聖夜', '正月', 'お月見', '花嫁'].forEach(addSeasonIfMatched);
-    // 特技テキストを解析
+    // 特技テキストを解析（特技は常時発動なのでisActive: true）
     for (const skillText of rawData.skillTexts) {
         const buffTemplates = analyzeBuffText(skillText);
         for (const template of buffTemplates) {
@@ -52,12 +52,12 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
                 id: `buff_${buffIdCounter++}`,
                 ...template,
                 source: 'self_skill',
-                isActive: false,
+                isActive: true,
             });
         }
     }
 
-    // 計略テキストを解析
+    // 計略テキストを解析（発動前提でisActive: true）
     for (const strategyText of rawData.strategyTexts) {
         const buffTemplates = analyzeBuffText(strategyText);
         for (const template of buffTemplates) {
@@ -65,12 +65,12 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
                 id: `buff_${buffIdCounter++}`,
                 ...template,
                 source: 'strategy',
-                isActive: false,
+                isActive: true,
             });
         }
     }
 
-    // 特殊能力テキストを解析
+    // 特殊能力テキストを解析（特殊能力も常時発動なのでisActive: true）
     if (rawData.specialTexts) {
         for (const specialText of rawData.specialTexts) {
             const buffTemplates = analyzeBuffText(specialText);
@@ -79,7 +79,7 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
                     id: `buff_${buffIdCounter++}`,
                     ...template,
                     source: 'special_ability',
-                    isActive: false,
+                    isActive: true,
                 });
             }
         }
@@ -110,7 +110,7 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
             attack_speed: rawData.baseStats.attack_speed ?? 0,
             attack_gap: rawData.baseStats.attack_gap ?? 0,
             movement_speed: rawData.baseStats.movement_speed ?? 0,
-            knockback: rawData.baseStats.knockback ?? 0,
+            retreat: rawData.baseStats.retreat ?? 0,
             target_count: rawData.baseStats.target_count ?? 0,
             ki_gain: rawData.baseStats.ki_gain ?? 0,
             damage_drain: rawData.baseStats.damage_drain ?? 0,

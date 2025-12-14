@@ -154,7 +154,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         attack_speed: 0,
         attack_gap: 0,
         movement_speed: 0,
-        knockback: 0,
+        retreat: 0,
         target_count: 0,
         ki_gain: 0,
         damage_drain: 0,

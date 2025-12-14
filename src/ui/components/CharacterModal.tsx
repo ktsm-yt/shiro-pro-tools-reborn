@@ -66,16 +66,15 @@ export function CharacterModal({ character, isOpen, onClose, currentBuffs }: Cha
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {Object.entries(currentBuffs).map(([stat, cell]) => {
                   if (!cell) return null;
-                  const total = cell.self + cell.ally + cell.strategy;
-                  if (total === 0) return null;
+                  if (cell.maxValue === 0) return null;
                   return (
                     <div key={stat} className="flex items-center justify-between bg-gray-900/60 rounded-lg px-3 py-2 border border-gray-700">
                       <span className="text-sm text-gray-300">{stat}</span>
-                      <span className="text-sm font-mono text-white">+{total}</span>
+                      <span className="text-sm font-mono text-white">+{Math.round(cell.maxValue)}</span>
                     </div>
                   );
                 })}
-                {Object.values(currentBuffs).filter(Boolean).every((c) => (c as VisualBuffCell).self + (c as VisualBuffCell).ally + (c as VisualBuffCell).strategy === 0) && (
+                {Object.values(currentBuffs).filter(Boolean).every((c) => (c as VisualBuffCell).maxValue === 0) && (
                   <p className="text-sm text-gray-500">現在受けているバフはありません</p>
                 )}
               </div>

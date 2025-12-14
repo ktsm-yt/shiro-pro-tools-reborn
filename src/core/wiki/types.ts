@@ -21,7 +21,7 @@ export interface RawCharacterData {
         attack_speed?: number;
         attack_gap?: number;
         movement_speed?: number;
-        knockback?: number;
+        retreat?: number;
         target_count?: number;
         ki_gain?: number;
         damage_drain?: number;

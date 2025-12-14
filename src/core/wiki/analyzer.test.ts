@@ -119,7 +119,7 @@ describe('analyzeBuffText', () => {
             expect(result[0]).toMatchObject({
                 stat: 'damage_taken',
                 mode: 'percent_max',
-                value: -25,
+                value: 25,  // 軽減量は正の値で格納
             });
         });
 
