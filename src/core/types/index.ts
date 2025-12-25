@@ -32,11 +32,12 @@ export type EnemyDebuffStat =
     | 'enemy_defense_ignore_complete'
     | 'enemy_movement'
     | 'enemy_retreat'        // 敵後退（旧: knockback）
+    | 'enemy_knockback'
     | 'enemy_range'
     | 'enemy_damage_dealt'   // 敵の与ダメ低下（防御貢献）
     | 'enemy_damage_taken';  // 敵の被ダメ上昇（攻撃貢献）
 
-export type SpecialBuffStat = 'inspire';
+export type SpecialBuffStat = 'inspire' | 'skill_multiplier';
 
 export type LegacyStat =
     | 'hp'

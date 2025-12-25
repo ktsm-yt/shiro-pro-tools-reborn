@@ -7,21 +7,45 @@ let buffIdCounter = 0;
 
 export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isActive'>[] {
     if (!text || text.trim() === '') return [];
-    const isPerGiant = /巨大化(する)?(度|ごと|毎|毎に|たび)/.test(text);
-    const parsed = parseSkillLine(text);
-    if (import.meta.env?.VITE_DEBUG_BUFF === '1') {
-        // eslint-disable-next-line no-console
-        console.log('[DEBUG_BUFF]', text, parsed);
-    }
-    const uniq = new Map<string, Omit<Buff, 'id' | 'source' | 'isActive'>>();
-    parsed.map(convertToRebornBuff).forEach(b => {
-        const buff = { ...b };
-        if (isPerGiant && typeof buff.value === 'number') {
-            buff.value = Number((buff.value * 5).toFixed(6));
+
+    // 句点で分割して、「巨大化毎に」を含むセンテンスだけ5倍処理
+    // 注: ピリオド(.)は数値（1.3倍など）に含まれるため、全角句点のみで分割
+    let processedText = text;
+
+    // 「自身に対しては効果○倍」「対象に対しては効果○倍」などのメタ効果は
+    // 前の句点を削除して前のセンテンスと結合
+    processedText = processedText.replace(/[。．]\s*((?:自身|対象|射程内(?:の)?(?:城娘)?|範囲内(?:の)?(?:城娘)?)(?:に対して)?(?:は|には)?効果\d+(?:\.\d+)?倍)/g, '、$1');
+
+    const sentences = processedText.split(/[。．]/);
+    const allBuffs: Omit<Buff, 'id' | 'source' | 'isActive'>[] = [];
+
+    for (const sentence of sentences) {
+        if (!sentence.trim()) continue;
+
+        const isPerGiant = /巨大化(する)?(度|ごと|毎|毎に|たび)/.test(sentence);
+        const parsed = parseSkillLine(sentence);
+
+        if (import.meta.env?.VITE_DEBUG_BUFF === '1') {
+            // eslint-disable-next-line no-console
+            console.log('[DEBUG_BUFF]', sentence, parsed, { isPerGiant });
         }
+
+        parsed.map(convertToRebornBuff).forEach(b => {
+            const buff = { ...b };
+            if (isPerGiant && typeof buff.value === 'number') {
+                buff.value = Number((buff.value * 5).toFixed(6));
+            }
+            allBuffs.push(buff);
+        });
+    }
+
+    // 重複除去
+    const uniq = new Map<string, Omit<Buff, 'id' | 'source' | 'isActive'>>();
+    allBuffs.forEach(buff => {
         const key = `${buff.stat}-${buff.mode}-${buff.value}-${buff.target}-${buff.costType ?? ''}-${buff.inspireSourceStat ?? ''}`;
         if (!uniq.has(key)) uniq.set(key, buff);
     });
+
     return Array.from(uniq.values());
 }
 

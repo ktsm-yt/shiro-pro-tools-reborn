@@ -154,6 +154,36 @@ export function CharacterModal({ character, isOpen, onClose, currentBuffs }: Cha
               </div>
             </section>
           ) : null}
+
+          {/* 特殊能力 */}
+          {character.specialAbilities?.length ? (
+            <section>
+              <h4 className="text-xs uppercase text-gray-400 tracking-wider mb-2">特殊能力</h4>
+              <div className="space-y-2">
+                {character.specialAbilities.map((special, i) => (
+                  <div key={special.id ?? i} className="bg-gradient-to-r from-orange-900/40 to-orange-800/40 rounded-lg p-3 border border-orange-700/50">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-orange-200">#{i + 1}</span>
+                      <span className="text-[11px] text-orange-300">{special.target}</span>
+                    </div>
+                    <p className="text-sm text-gray-200">
+                      {special.stat === 'skill_multiplier' ? (
+                        <>
+                          <span className="text-orange-200 font-semibold">特技効果 {special.value}×</span>
+                          <span className="text-gray-400 text-xs ml-2">（特技バフに適用）</span>
+                        </>
+                      ) : (
+                        <>
+                          {special.stat} {special.value}{special.mode === 'percent_max' ? '%' : ''}
+                          <span className="text-gray-400 text-xs ml-2">{special.mode}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
 
         <footer className="p-4 border-t border-gray-800 bg-gray-900/80 flex items-center justify-between">

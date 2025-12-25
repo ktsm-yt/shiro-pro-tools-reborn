@@ -132,6 +132,17 @@ describe('analyzeBuffText', () => {
                 value: 20,
             });
         });
+
+        it('should parse "撃破気が1増加" correctly (enemy defeat cost)', () => {
+            const result = analyzeBuffText('撃破気が1増加');
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                stat: 'cost',
+                mode: 'flat_sum',
+                value: 1,
+                costType: 'enemy_defeat',
+            });
+        });
     });
 
     describe('並列表記の展開', () => {

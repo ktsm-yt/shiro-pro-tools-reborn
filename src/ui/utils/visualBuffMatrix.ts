@@ -124,6 +124,12 @@ export function buildVisualBuffMatrix(
   });
 
   activeChars.forEach((sourceChar) => {
+    // 特殊能力から skill_multiplier を抽出
+    const skillMultiplier = sourceChar.specialAbilities?.find(
+      (b) => b.stat === 'skill_multiplier' && b.isActive !== false
+    );
+    const multiplier = skillMultiplier?.value ?? 1;
+
     const allBuffs: Buff[] = [
       ...(sourceChar.skills || []),
       ...(sourceChar.strategies || []),
@@ -132,6 +138,10 @@ export function buildVisualBuffMatrix(
 
     allBuffs.forEach((buff) => {
       if (buff.isActive === false) return;
+
+      // skill_multiplier 自体は表示しない
+      if (buff.stat === 'skill_multiplier') return;
+
       if (!tracked.has(buff.stat)) return;
 
       activeChars.forEach((targetChar) => {
@@ -151,6 +161,9 @@ export function buildVisualBuffMatrix(
               ? 'self'
               : 'ally';
 
+        // 特技バフには skill_multiplier を適用
+        const effectiveValue = buff.source === 'self_skill' ? buff.value * multiplier : buff.value;
+
         // flat_sum は固定値として別途追跡
         const isFlat = buff.mode === 'flat_sum' && flatStats.has(buff.stat);
         const isDuplicate = buff.isDuplicate === true;
@@ -162,22 +175,22 @@ export function buildVisualBuffMatrix(
         // 同キャラ内スタック（徐々気など）: 特技+計略を合算
         if (isSelfStackable && sourceChar.id === targetChar.id) {
           if (type === 'self') {
-            cell.selfStackValue += buff.value;
+            cell.selfStackValue += effectiveValue;
             cell.hasSelf = true;
           } else if (type === 'strategy') {
-            cell.strategyStackValue += buff.value;
+            cell.strategyStackValue += effectiveValue;
             cell.hasStrategy = true;
           }
           cell.maxValue = cell.selfStackValue + cell.strategyStackValue;
         } else if (isFlat) {
           // 固定値バフ
-          cell.maxFlat = Math.max(cell.maxFlat, buff.value);
+          cell.maxFlat = Math.max(cell.maxFlat, effectiveValue);
           if (type === 'self') cell.hasSelfFlat = true;
           else if (type === 'ally') cell.hasAllyFlat = true;
           else if (type === 'strategy') cell.hasStrategyFlat = true;
         } else {
           // %バフ
-          cell.maxValue = Math.max(cell.maxValue, buff.value);
+          cell.maxValue = Math.max(cell.maxValue, effectiveValue);
           if (type === 'self') cell.hasSelf = true;
           else if (type === 'ally') cell.hasAlly = true;
           else if (type === 'strategy') cell.hasStrategy = true;
@@ -189,7 +202,7 @@ export function buildVisualBuffMatrix(
 
         const source: VisualBuffSource = {
           from: sourceChar.name,
-          value: buff.value,
+          value: effectiveValue,
           type,
           stat: buff.stat,
           isFlat,

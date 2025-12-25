@@ -122,4 +122,7 @@ export const patterns: ParsedPattern[] = [
     { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の攻撃の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'attack' },
     { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'defense' },
     { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の攻撃と防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'attack' }, // defenseも別途扱う
+
+    // 10. メタ効果系
+    { stat: 'skill_multiplier', mode: 'absolute_set', regex: /特技効果(?:が)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: m => parseFloat(m[1]) },
 ];

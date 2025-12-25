@@ -298,36 +298,51 @@ function parseSkillLineSingle(line: string, originalLine: string): ParsedBuff[] 
         }
     });
 
-    // 自身への倍率適用（自身に対しては効果1.5倍など）
-    const selfMultiplierMatch = line.match(/自身(?:に対して)?(?:は|には)?効果(\d+(?:\.\d+)?)倍/);
-    if (selfMultiplierMatch) {
-        const multiplier = parseFloat(selfMultiplierMatch[1]);
+    // 対象への倍率適用（自身に対しては効果1.5倍、対象には効果2倍など）
+    const targetMultiplierMatch = line.match(/(自身|対象|射程内(?:の)?(?:城娘)?|範囲内(?:の)?(?:城娘)?)(?:に対して)?(?:は|には)?効果(\d+(?:\.\d+)?)倍/);
+    if (targetMultiplierMatch) {
+        const targetKeyword = targetMultiplierMatch[1];
+        const multiplier = parseFloat(targetMultiplierMatch[2]);
+
+        // 対象キーワードをTarget型にマッピング
+        let multiplierTarget: Target = 'self';
+        if (targetKeyword === '対象') {
+            multiplierTarget = 'ally';
+        } else if (/射程内/.test(targetKeyword) || /範囲内/.test(targetKeyword)) {
+            multiplierTarget = 'range';
+        }
+
         const transformed: ParsedBuff[] = [];
         results.forEach(buff => {
             if (buff.target === 'field') {
                 transformed.push(buff);
                 return;
             }
-            if (buff.target === 'self') {
+            if (buff.target === multiplierTarget) {
                 transformed.push({ ...buff, value: buff.value * multiplier });
                 return;
             }
 
-            const updatedTags = new Set(buff.conditionTags ?? []);
-            updatedTags.add('exclude_self');
+            // multiplierTarget以外の対象はそのまま
+            if (multiplierTarget === 'self') {
+                const updatedTags = new Set(buff.conditionTags ?? []);
+                updatedTags.add('exclude_self');
 
-            transformed.push({
-                ...buff,
-                conditionTags: Array.from(updatedTags),
-            });
+                transformed.push({
+                    ...buff,
+                    conditionTags: Array.from(updatedTags),
+                });
 
-            transformed.push({
-                ...buff,
-                target: 'self',
-                value: buff.value * multiplier,
-                conditionTags: (buff.conditionTags ?? []).filter(tag => tag !== 'exclude_self'),
-                rawText: `${buff.rawText}(自身効果${multiplier}倍)`,
-            });
+                transformed.push({
+                    ...buff,
+                    target: 'self',
+                    value: buff.value * multiplier,
+                    conditionTags: (buff.conditionTags ?? []).filter(tag => tag !== 'exclude_self'),
+                    rawText: `${buff.rawText}(自身効果${multiplier}倍)`,
+                });
+            } else {
+                transformed.push(buff);
+            }
         });
         results.length = 0;
         results.push(...transformed);
