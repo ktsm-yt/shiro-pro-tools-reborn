@@ -1,4 +1,4 @@
-import type { Character, Buff } from '../types';
+import type { Character, Buff, Target } from '../types';
 import type { RawCharacterData } from './types';
 import { parseSkillLine } from '../parser/buffParser';
 import { convertToRebornBuff } from '../parser/converter';
@@ -8,35 +8,110 @@ let buffIdCounter = 0;
 export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isActive'>[] {
     if (!text || text.trim() === '') return [];
 
-    // 句点で分割して、「巨大化毎に」を含むセンテンスだけ5倍処理
-    // 注: ピリオド(.)は数値（1.3倍など）に含まれるため、全角句点のみで分割
-    let processedText = text;
+    // グローバルなターゲット倍率を抽出（「自身に対しては効果○倍」など）
+    // これは全文の末尾に出現し、すべてのセンテンスに適用される
+    const globalMultiplierMatch = text.match(/(自身|対象|射程内(?:の)?(?:城娘)?|範囲内(?:の)?(?:城娘)?)(?:に対して)?(?:は|には)?効果(\d+(?:\.\d+)?)倍/);
+    let globalTarget: Target | null = null;
+    let globalMultiplier: number = 1;
 
-    // 「自身に対しては効果○倍」「対象に対しては効果○倍」などのメタ効果は
-    // 前の句点を削除して前のセンテンスと結合
-    processedText = processedText.replace(/[。．]\s*((?:自身|対象|射程内(?:の)?(?:城娘)?|範囲内(?:の)?(?:城娘)?)(?:に対して)?(?:は|には)?効果\d+(?:\.\d+)?倍)/g, '、$1');
+    if (globalMultiplierMatch) {
+        const targetKeyword = globalMultiplierMatch[1];
+        globalMultiplier = parseFloat(globalMultiplierMatch[2]);
+
+        // ターゲットキーワードをTarget型にマッピング
+        if (targetKeyword === '自身') {
+            globalTarget = 'self';
+        } else if (targetKeyword === '対象') {
+            globalTarget = 'ally';
+        } else if (/射程内/.test(targetKeyword) || /範囲内/.test(targetKeyword)) {
+            globalTarget = 'range';
+        }
+    }
+
+    // グローバル倍率の記述を削除してから文分割
+    // 重要: 文の区切り（。）を保持するため、マッチした部分を「。」に置き換える
+    let processedText = text;
+    if (globalMultiplierMatch) {
+        processedText = processedText.replace(/[。．]?\s*((?:自身|対象|射程内(?:の)?(?:城娘)?|範囲内(?:の)?(?:城娘)?)(?:に対して)?(?:は|には)?効果\d+(?:\.\d+)?倍)[。．]?/g, '。');
+    }
 
     const sentences = processedText.split(/[。．]/);
     const allBuffs: Omit<Buff, 'id' | 'source' | 'isActive'>[] = [];
 
+    // 「巨大化毎に」の効果は次の条件マーカーまで継続する
+    let isPerGiantScope = false;
+
     for (const sentence of sentences) {
         if (!sentence.trim()) continue;
 
-        const isPerGiant = /巨大化(する)?(度|ごと|毎|毎に|たび)/.test(sentence);
+        // 新しい条件マーカー（最大化時など）でスコープをリセット
+        const isNewCondition = /最大化時|配置時|撤退時|敵撃破時/.test(sentence);
+        if (isNewCondition) {
+            isPerGiantScope = false;
+        }
+
+        // 「巨大化毎に」が出現したらスコープ開始
+        if (/巨大化(する)?(度|ごと|毎|毎に|たび)/.test(sentence)) {
+            isPerGiantScope = true;
+        }
+
         const parsed = parseSkillLine(sentence);
 
         if (import.meta.env?.VITE_DEBUG_BUFF === '1') {
             // eslint-disable-next-line no-console
-            console.log('[DEBUG_BUFF]', sentence, parsed, { isPerGiant });
+            console.log('[DEBUG_BUFF]', sentence, parsed, { isPerGiantScope });
         }
 
         parsed.map(convertToRebornBuff).forEach(b => {
             const buff = { ...b };
-            if (isPerGiant && typeof buff.value === 'number') {
+            if (isPerGiantScope && typeof buff.value === 'number') {
                 buff.value = Number((buff.value * 5).toFixed(6));
             }
             allBuffs.push(buff);
         });
+    }
+
+    // グローバル倍率を適用
+    if (globalTarget && globalMultiplier !== 1) {
+        const transformed: Omit<Buff, 'id' | 'source' | 'isActive'>[] = [];
+
+        allBuffs.forEach(buff => {
+            if (buff.target === 'field') {
+                transformed.push(buff);
+                return;
+            }
+
+            if (buff.target === globalTarget) {
+                // すでに対象が一致している場合は倍率を適用
+                transformed.push({ ...buff, value: Number((buff.value * globalMultiplier).toFixed(6)) });
+                return;
+            }
+
+            // globalTarget='self'の場合、全体/範囲バフを分割
+            if (globalTarget === 'self') {
+                // 元のバフは自分以外用に残す
+                const updatedTags = new Set(buff.conditionTags ?? []);
+                updatedTags.add('exclude_self');
+                transformed.push({
+                    ...buff,
+                    conditionTags: Array.from(updatedTags),
+                });
+
+                // 自分用のバフを追加（倍率適用）
+                transformed.push({
+                    ...buff,
+                    target: 'self',
+                    value: Number((buff.value * globalMultiplier).toFixed(6)),
+                    conditionTags: (buff.conditionTags ?? []).filter(tag => tag !== 'exclude_self'),
+                });
+            } else {
+                // 他のケースはそのまま
+                transformed.push(buff);
+            }
+        });
+
+        allBuffs.length = 0;
+        allBuffs.push(...transformed);
     }
 
     // 重複除去

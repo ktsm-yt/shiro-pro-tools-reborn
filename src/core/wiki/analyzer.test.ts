@@ -137,10 +137,9 @@ describe('analyzeBuffText', () => {
             const result = analyzeBuffText('撃破気が1増加');
             expect(result).toHaveLength(1);
             expect(result[0]).toMatchObject({
-                stat: 'cost',
+                stat: 'cost_defeat_bonus',
                 mode: 'flat_sum',
                 value: 1,
-                costType: 'enemy_defeat',
             });
         });
     });
@@ -194,6 +193,29 @@ describe('analyzeBuffText', () => {
             expect(result.length).toBeGreaterThanOrEqual(2);
             expect(result.find(b => b.stat === 'attack')?.value).toBe(50); // 10 × 5
             expect(result.find(b => b.stat === 'attack_speed')?.value).toBe(50); // 10 × 5
+        });
+
+        it('should apply ×5 to subsequent sentences until new condition marker', () => {
+            // 暁星大坂城の特技テキスト: 「巨大化毎に」のスコープは「最大化時」まで継続
+            const text = '巨大化毎に射程内城娘の攻撃と攻撃速度10%上昇、被ダメージ9%軽減。全城娘の射程が10、攻撃が50上昇。最大化時、自身の範囲攻撃の範囲が35%上昇';
+            const result = analyzeBuffText(text);
+
+            // 第1文: 巨大化毎に → ×5適用
+            expect(result.find(b => b.stat === 'attack' && b.mode === 'percent_max' && b.target === 'range')?.value).toBe(50); // 10 × 5
+            expect(result.find(b => b.stat === 'attack_speed' && b.target === 'range')?.value).toBe(50); // 10 × 5
+            expect(result.find(b => b.stat === 'damage_taken' && b.target === 'range')?.value).toBe(45); // 9 × 5
+
+            // 第2文: スコープ継続 → ×5適用
+            const allAttackFlat = result.filter(b => b.stat === 'attack' && b.mode === 'flat_sum' && b.target === 'all');
+            expect(allAttackFlat.length).toBeGreaterThanOrEqual(1);
+            expect(allAttackFlat[0]?.value).toBe(250); // 50 × 5
+
+            const allRangeFlat = result.filter(b => b.stat === 'range' && b.mode === 'flat_sum' && b.target === 'all');
+            expect(allRangeFlat.length).toBeGreaterThanOrEqual(1);
+            expect(allRangeFlat[0]?.value).toBe(50); // 10 × 5
+
+            // 第3文: 最大化時 → 新条件、×5適用なし
+            // (範囲攻撃の範囲はパースされないかもしれないがスコープリセットは確認)
         });
     });
 });

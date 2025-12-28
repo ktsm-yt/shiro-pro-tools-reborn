@@ -53,7 +53,7 @@ describe('buildVisualBuffMatrix', () => {
     // 特技のバフ値に1.25倍が適用されているか確認
     const attackCell = matrix[char1.id]?.attack;
     expect(attackCell).toBeDefined();
-    expect(attackCell?.self).toBe(25); // 20 * 1.25 = 25
+    expect(attackCell?.maxValue).toBe(25); // 20 * 1.25 = 25
   });
 
   it('should not apply skill_multiplier to strategy buffs', () => {
@@ -124,7 +124,7 @@ describe('buildVisualBuffMatrix', () => {
     // 計略のバフ値には倍率が適用されないことを確認
     const attackCell = matrix[char2.id]?.attack;
     expect(attackCell).toBeDefined();
-    expect(attackCell?.strategy).toBe(30); // multiplier not applied
+    expect(attackCell?.maxValue).toBe(30); // multiplier not applied
   });
 
   it('should not display skill_multiplier in matrix', () => {
@@ -225,8 +225,8 @@ describe('buildVisualBuffMatrix', () => {
     const matrix = buildVisualBuffMatrix(formation);
 
     // 両方のスキルに倍率が適用される
-    expect(matrix[char1.id]?.attack?.self).toBe(40); // 20 * 2
-    expect(matrix[char1.id]?.defense?.self).toBe(30); // 15 * 2
+    expect(matrix[char1.id]?.attack?.maxValue).toBe(40); // 20 * 2
+    expect(matrix[char1.id]?.defense?.maxValue).toBe(30); // 15 * 2
   });
 
   it('should use default multiplier of 1 when skill_multiplier is inactive', () => {
@@ -277,6 +277,6 @@ describe('buildVisualBuffMatrix', () => {
     const matrix = buildVisualBuffMatrix(formation);
 
     // 非アクティブな場合は倍率が適用されない
-    expect(matrix[char1.id]?.attack?.self).toBe(20);
+    expect(matrix[char1.id]?.attack?.maxValue).toBe(20);
   });
 });
