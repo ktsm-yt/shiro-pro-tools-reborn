@@ -31,10 +31,16 @@ const asPercentFromMultiplier = (m: RegExpExecArray) => (parseFloat(m[1]) - 1) *
 const PCT = '[%％]';
 
 export const patterns: ParsedPattern[] = [
+    // 0. 鼓舞系（特殊）- 汎用パターンより先にマッチさせる
+    { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の攻撃と防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'attack' }, // defenseも別途扱う
+    { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の攻撃の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'attack' },
+    { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'defense' },
+
     // 1. 攻撃系
     // 「攻撃と防御1.2倍」「攻撃が1.2倍」のような複合パターン（展開後に「が」が入る）
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を)?(?:と[^0-9]+)?(\\d+(?:\\.\\d+)?)倍`), unit: '×', valueTransform: asPercentFromMultiplier },
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
+    // 注: 鼓舞パターン「自身の攻撃と防御の○%...加算」と重複しないよう、(?<!自身の)で除外
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:が|を)?(?:と[^0-9]+)?(\\d+(?:\\.\\d+)?)倍`), unit: '×', valueTransform: asPercentFromMultiplier },
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
     { stat: 'attack', mode: 'flat_sum', regex: /攻撃(?:力)?(?:が|を|\+)\s*(\d+)(?![0-9]*[%％.])(?:上昇|増加|アップ)?/ },  // が|を|+ 必須、小数点も除外
     { stat: 'enemy_attack', mode: 'percent_max', regex: new RegExp(`敵の?攻撃(?:力)?(?:と[^0-9]*)?(?:が|を)?\\s*(\\d+)${PCT}(?:低下|減少|ダウン)`) },
@@ -66,8 +72,8 @@ export const patterns: ParsedPattern[] = [
     // 4. 射程・対象数系
     { stat: 'enemy_range', mode: 'percent_max', regex: new RegExp(`射程(?:が|を)?\\s*(\\d+)${PCT}?(?:低下|減少|ダウン)`) },
     { stat: 'range', mode: 'percent_max', regex: /射程(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, unit: '×', valueTransform: asPercentFromMultiplier },
-    { stat: 'range', mode: 'percent_max', regex: new RegExp(`射程(?:が|を)?\\s*([+-]?\\d+)${PCT}`) },
-    { stat: 'range', mode: 'flat_sum', regex: /射程(?:が|を|[+-])?\s*([+-]?\d+)(?![%％.倍])/ },  // が|を|+|- 許容、小数点・倍・%除外
+    { stat: 'range', mode: 'percent_max', regex: new RegExp(`射程(?:が|を)?\\s*([+-]?\\d+)${PCT}(?!低下|減少|ダウン)`) },
+    { stat: 'range', mode: 'flat_sum', regex: /射程(?:が|を|[+-])?\s*([+-]?\d+)(?![0-9%％.倍])/ },  // が|を|+|- 許容、数字・小数点・倍・%除外
     { stat: 'target_count', mode: 'flat_sum', regex: /対象(?:が)?\s*([+-]?\d+)増加/ },
     { stat: 'attack_count', mode: 'flat_sum', regex: /攻撃回数(?:が)?\s*([+-]?\d+)/ },
 
@@ -118,11 +124,6 @@ export const patterns: ParsedPattern[] = [
     { stat: 'recovery', mode: 'flat_sum', regex: /回復(?:が)?\s*(\d+)上昇/ },
     { stat: 'recovery', mode: 'percent_max', regex: /回復(?:が)?\s*(\d+(?:\.\d+)?)倍/, unit: '×', valueTransform: asPercentFromMultiplier },
 
-    // 9. 鼓舞系（特殊）
-    { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の攻撃の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'attack' },
-    { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'defense' },
-    { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の攻撃と防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'attack' }, // defenseも別途扱う
-
-    // 10. メタ効果系
+    // 9. メタ効果系
     { stat: 'skill_multiplier', mode: 'absolute_set', regex: /特技効果(?:が)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: m => parseFloat(m[1]) },
 ];

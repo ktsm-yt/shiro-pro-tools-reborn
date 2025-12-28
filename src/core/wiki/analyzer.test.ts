@@ -217,6 +217,67 @@ describe('analyzeBuffText', () => {
             // 第3文: 最大化時 → 新条件、×5適用なし
             // (範囲攻撃の範囲はパースされないかもしれないがスコープリセットは確認)
         });
+
+        it('should NOT apply ×5 to 鼓舞 before 巨大化毎に (室町第)', () => {
+            // 室町第の特技: 鼓舞は最初の文で巨大化毎にの前
+            const text = '【鼓舞】自身の攻撃と防御の30%の値を射程内の城娘に加算。巨大化毎に射程内の城娘の射程が10、攻撃が50上昇。射程内の敵の攻撃と移動速度が8%低下';
+            const result = analyzeBuffText(text);
+
+            // 鼓舞(inspire)は巨大化毎にの前なので×5されない
+            const inspireAttack = result.find(b => b.stat === 'inspire' && b.inspireSourceStat === 'attack');
+            const inspireDefense = result.find(b => b.stat === 'inspire' && b.inspireSourceStat === 'defense');
+            expect(inspireAttack?.value).toBe(30); // NOT 150
+            expect(inspireDefense?.value).toBe(30); // NOT 150
+
+            // 巨大化毎にの後は×5
+            expect(result.find(b => b.stat === 'range' && b.mode === 'flat_sum')?.value).toBe(50); // 10 × 5
+            expect(result.find(b => b.stat === 'attack' && b.mode === 'flat_sum')?.value).toBe(250); // 50 × 5
+        });
+
+        it('should parse 撃破気が1増加 in special ability (室町第)', () => {
+            const text = '60秒間特技効果が1.25倍、射程内の殿と城娘を継続回復し、敵に継続的にダメージを与える。射程内の城娘の撃破気が1増加';
+            const result = analyzeBuffText(text);
+
+            // skill_multiplier
+            const multiplier = result.find(b => b.stat === 'skill_multiplier');
+            expect(multiplier?.value).toBe(1.25);
+
+            // 撃破気が1増加 → cost_defeat_bonus
+            const defeatBonus = result.find(b => b.stat === 'cost_defeat_bonus');
+            expect(defeatBonus?.value).toBe(1);
+            expect(defeatBonus?.target).toBe('range');
+        });
+
+        it('should NOT apply ×5 to 鼓舞 even without period before 巨大化毎に (wiki format)', () => {
+            // Wiki HTMLでは句点が省略されることがある
+            const text = '【鼓舞】自身の攻撃と防御の30%の値を射程内の城娘に加算巨大化毎に射程内の城娘の射程が10、攻撃が50上昇射程内の敵の攻撃と移動速度が8%低下';
+            const result = analyzeBuffText(text);
+
+            // 鼓舞は×5されない
+            const inspireAttack = result.find(b => b.stat === 'inspire' && b.inspireSourceStat === 'attack');
+            const inspireDefense = result.find(b => b.stat === 'inspire' && b.inspireSourceStat === 'defense');
+            expect(inspireAttack?.value).toBe(30); // NOT 150
+            expect(inspireDefense?.value).toBe(30); // NOT 150
+
+            // 巨大化毎には×5
+            expect(result.find(b => b.stat === 'range' && b.mode === 'flat_sum')?.value).toBe(50); // 10 × 5
+            expect(result.find(b => b.stat === 'attack' && b.mode === 'flat_sum')?.value).toBe(250); // 50 × 5
+            expect(result.find(b => b.stat === 'enemy_attack')?.value).toBe(40); // 8 × 5
+            expect(result.find(b => b.stat === 'enemy_movement')?.value).toBe(40); // 8 × 5
+        });
+
+        it('should NOT parse enemy debuff "射程が50%低下" as positive range buff', () => {
+            // 敵デバフの並列展開で「射程」が正のバフにならないことを確認
+            const text = '射程内の敵の与ダメージと射程が50%低下';
+            const result = analyzeBuffText(text);
+
+            // enemy_range (敵の射程デバフ) があること
+            expect(result.find(b => b.stat === 'enemy_range')).toBeDefined();
+
+            // range (正のバフ) がないこと
+            const rangeBuffs = result.filter(b => b.stat === 'range');
+            expect(rangeBuffs).toHaveLength(0);
+        });
     });
 });
 

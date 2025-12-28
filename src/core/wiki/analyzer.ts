@@ -35,6 +35,10 @@ export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isA
         processedText = processedText.replace(/[。．]?\s*((?:自身|対象|射程内(?:の)?(?:城娘)?|範囲内(?:の)?(?:城娘)?)(?:に対して)?(?:は|には)?効果\d+(?:\.\d+)?倍)[。．]?/g, '。');
     }
 
+    // 「巨大化毎に」の前で分割（句点がない場合に対応）
+    // 「巨大化毎に」は分割後の後半に含める
+    processedText = processedText.replace(/(巨大化(?:する)?(?:度|ごと|毎|毎に|たび))/g, '。$1');
+
     const sentences = processedText.split(/[。．]/);
     const allBuffs: Omit<Buff, 'id' | 'source' | 'isActive'>[] = [];
 

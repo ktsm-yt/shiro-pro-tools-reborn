@@ -155,6 +155,11 @@ function detectDynamicBuff(text: string, value: number): Partial<ParsedBuff> | n
  * 例: "防御・移動速度が30%低下" → ["防御が30%低下", "移動速度が30%低下"]
  */
 function expandParallelStats(line: string): string[] {
+    // 鼓舞パターン（自身の攻撃と防御の○%...加算）は展開しない
+    if (/自身の(?:攻撃|防御)(?:と|・)(?:攻撃|防御)の\d+[%％].*?加算/.test(line)) {
+        return [line];
+    }
+
     // 並列パターンの検出
     // 注意: 長いパターン（攻撃速度、移動速度）を先に配置すること
     const statPattern = '攻撃速度|移動速度|攻撃(?:力)?|防御(?:力)?|射程|回復|耐久|与ダメ(?:ージ)?|被ダメ(?:ージ)?';
