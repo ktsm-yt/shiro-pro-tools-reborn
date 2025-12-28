@@ -40,8 +40,8 @@ export const patterns: ParsedPattern[] = [
     // 「攻撃と防御1.2倍」「攻撃が1.2倍」のような複合パターン（展開後に「が」が入る）
     // 注: 鼓舞パターン「自身の攻撃と防御の○%...加算」と重複しないよう、(?<!自身の)で除外
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:が|を)?(?:と[^0-9]+)?(\\d+(?:\\.\\d+)?)倍`), unit: '×', valueTransform: asPercentFromMultiplier },
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
     { stat: 'attack', mode: 'flat_sum', regex: /攻撃(?:力)?(?:が|を|\+)\s*(\d+)(?![0-9]*[%％.])(?:上昇|増加|アップ)?/ },  // が|を|+ 必須、小数点も除外
     { stat: 'enemy_attack', mode: 'percent_max', regex: new RegExp(`敵の?攻撃(?:力)?(?:と[^0-9]*)?(?:が|を)?\\s*(\\d+)${PCT}(?:低下|減少|ダウン)`) },
     { stat: 'enemy_attack', mode: 'flat_sum', regex: /敵の?攻撃(?:力)?(?:と[^0-9]*)?(?:が|を)?\s*(\d+)(?![%％.])(?:低下|減少|ダウン)/ },
@@ -49,7 +49,7 @@ export const patterns: ParsedPattern[] = [
     // 2. 防御系
     // 「攻撃と防御1.2倍」「防御が1.2倍」のような複合パターン（展開後に「が」が入る）
     { stat: 'defense', mode: 'percent_max', regex: new RegExp(`防御(?:力)?(?:が|を)?(\\d+(?:\\.\\d+)?)倍`), unit: '×', valueTransform: asPercentFromMultiplier },
-    { stat: 'defense', mode: 'percent_max', regex: new RegExp(`防御(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
+    { stat: 'defense', mode: 'percent_max', regex: new RegExp(`防御(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
     { stat: 'defense', mode: 'flat_sum', regex: /防御(?:力)?(?:が|を|\+)\s*(\d+)(?![0-9]*[%％.])(?:上昇|増加|アップ)?/ },  // が|を|+ 必須、小数点も除外
     { stat: 'enemy_defense', mode: 'percent_max', regex: new RegExp(`敵の?防御(?:力)?(?:が|を)?\\s*(\\d+)${PCT}低下`) },
     { stat: 'enemy_defense', mode: 'flat_sum', regex: /敵の?防御(?:力)?(?:が|を)?\s*(\d+)(?![%％])(?:低下|減少|ダウン)/ },
@@ -59,7 +59,7 @@ export const patterns: ParsedPattern[] = [
     // 3. ダメージ系
     { stat: 'give_damage', mode: 'percent_max', regex: /(\d+(?:\.\d+)?)倍のダメージを与える/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: /攻撃の?(\d+(?:\.\d+)?)倍のダメージ/, valueTransform: asPercentFromMultiplier, unit: '×' },
-    { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}`) },
+    { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)`) },
     { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`^与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}`) },
     { stat: 'enemy_damage_taken', mode: 'percent_max', regex: new RegExp(`被ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:増加|上昇|アップ)`) },  // 敵の被ダメ上昇（攻撃貢献）
     { stat: 'enemy_damage_taken', mode: 'percent_max', regex: /被ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, unit: '×', valueTransform: asPercentFromMultiplier },  // 敵の被ダメ倍（1.5倍→50%）

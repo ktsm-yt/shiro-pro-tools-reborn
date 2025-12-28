@@ -273,10 +273,28 @@ describe('analyzeBuffText', () => {
 
             // enemy_range (敵の射程デバフ) があること
             expect(result.find(b => b.stat === 'enemy_range')).toBeDefined();
+            // enemy_damage_dealt (敵の与ダメ低下) があること
+            expect(result.find(b => b.stat === 'enemy_damage_dealt')).toBeDefined();
 
             // range (正のバフ) がないこと
             const rangeBuffs = result.filter(b => b.stat === 'range');
             expect(rangeBuffs).toHaveLength(0);
+
+            // damage_dealt (正の与ダメバフ) がないこと
+            const damageBuffs = result.filter(b => b.stat === 'damage_dealt');
+            expect(damageBuffs).toHaveLength(0);
+        });
+
+        it('should parse "対象の射程が1.3倍" as 30% range buff with target ally', () => {
+            // 計略のパターン: 対象の射程が1.3倍
+            const text = '対象の射程が1.3倍';
+            const result = analyzeBuffText(text);
+
+            expect(result).toHaveLength(1);
+            expect(result[0].stat).toBe('range');
+            expect(result[0].mode).toBe('percent_max');
+            expect(result[0].value).toBeCloseTo(30, 5); // 1.3 - 1 = 0.3 = 30%
+            expect(result[0].target).toBe('ally'); // 「対象」= ally
         });
     });
 });
