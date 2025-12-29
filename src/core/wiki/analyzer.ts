@@ -5,6 +5,34 @@ import { convertToRebornBuff } from '../parser/converter';
 
 let buffIdCounter = 0;
 
+/**
+ * 計略テキストの最後の()から対象を抽出する
+ * 例: "30秒間対象の射程が1.3倍（自分のみが対象）" → 'self'
+ * 例: "対象の攻撃20%上昇（射程内の城娘が対象）" → 'range'
+ */
+function extractStrategyTarget(text: string): Target | null {
+    // 最後の（）または()を抽出
+    const match = text.match(/[（(]([^）)]+)[）)](?:[^（()）]*)?$/);
+    if (!match) return null;
+
+    const targetText = match[1];
+
+    // 自分のみ / 自身 → 'self'
+    if (/自分|自身/.test(targetText)) {
+        return 'self';
+    }
+    // 射程内 / 範囲内 → 'range'
+    if (/射程内|範囲内/.test(targetText)) {
+        return 'range';
+    }
+    // 対象 / 味方 → 'ally' (デフォルト)
+    if (/対象|味方/.test(targetText)) {
+        return 'ally';
+    }
+
+    return null;
+}
+
 export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isActive'>[] {
     if (!text || text.trim() === '') return [];
 
@@ -162,11 +190,18 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
 
     // 計略テキストを解析（発動前提でisActive: true）
     for (const strategyText of rawData.strategyTexts) {
+        // 計略の対象は最後の()内の文章で決まる
+        // 例: "30秒間対象の射程が1.3倍（自分のみが対象）" → target = 'self'
+        const strategyTargetOverride = extractStrategyTarget(strategyText);
+
         const buffTemplates = analyzeBuffText(strategyText);
         for (const template of buffTemplates) {
+            // 計略の()内で「自分」指定の場合、targetを'self'に上書き
+            const finalTarget = strategyTargetOverride === 'self' ? 'self' : template.target;
             strategies.push({
                 id: `buff_${buffIdCounter++}`,
                 ...template,
+                target: finalTarget,
                 source: 'strategy',
                 isActive: true,
             });

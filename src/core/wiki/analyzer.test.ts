@@ -299,6 +299,44 @@ describe('analyzeBuffText', () => {
     });
 });
 
+describe('analyzeCharacter - strategy target from parentheses', () => {
+    it('should set target to self when strategy has (自分のみが対象)', () => {
+        const rawData: RawCharacterData = {
+            name: 'テスト',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['30秒間対象の射程が1.3倍（自分のみが対象）'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        expect(character.strategies).toHaveLength(1);
+        expect(character.strategies[0].stat).toBe('range');
+        expect(character.strategies[0].target).toBe('self'); // ()内で自分指定 → self
+    });
+
+    it('should keep original target when no parentheses override', () => {
+        const rawData: RawCharacterData = {
+            name: 'テスト',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['射程内の城娘の攻撃が20%上昇'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        expect(character.strategies).toHaveLength(1);
+        expect(character.strategies[0].stat).toBe('attack');
+        expect(character.strategies[0].target).toBe('range'); // 元のtargetを維持
+    });
+});
+
 describe('analyzeCharacter', () => {
     it('should convert RawCharacterData to Character', () => {
         const rawData: RawCharacterData = {
