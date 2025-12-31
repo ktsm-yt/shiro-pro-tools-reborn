@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import type { Character, EnvironmentSettings } from '../../core/types';
 import { getWeaponMeta } from '../constants/meta';
 
@@ -14,6 +14,79 @@ interface RightSidebarProps {
 
 type PanelMode = 'env' | 'detail';
 
+/**
+ * 数値入力フィールド（完全非制御コンポーネント）
+ * - DOMのdefaultValueを使用し、Reactの状態を使わない
+ * - これによりフォーカス喪失を完全に防ぐ
+ */
+const EnvField = memo(function EnvField({
+    label,
+    name,
+    initialValue,
+    suffix = '',
+    onCommit,
+}: {
+    label: string;
+    name: string;
+    initialValue: number;
+    suffix?: string;
+    onCommit: (name: string, value: number) => void;
+}) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const committedValueRef = useRef(initialValue);
+
+    const handleBlur = () => {
+        if (!inputRef.current) return;
+        const num = parseFloat(inputRef.current.value);
+        if (!isNaN(num) && num !== committedValueRef.current) {
+            committedValueRef.current = num;
+            onCommit(name, num);
+        } else if (isNaN(num)) {
+            // 無効な値の場合は元に戻す
+            inputRef.current.value = String(committedValueRef.current);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            inputRef.current?.blur();
+        }
+    };
+
+    // リセット時に値を更新するためのeffect
+    useEffect(() => {
+        if (inputRef.current && document.activeElement !== inputRef.current) {
+            if (Math.abs(committedValueRef.current - initialValue) > 0.001) {
+                inputRef.current.value = String(initialValue);
+                committedValueRef.current = initialValue;
+            }
+        }
+    }, [initialValue]);
+
+    return (
+        <div className="flex items-center justify-between py-1.5">
+            <span className="text-xs text-gray-400">{label}</span>
+            <div className="flex items-center gap-1">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode="decimal"
+                    defaultValue={initialValue}
+                    onBlur={handleBlur}
+                    onKeyDown={handleKeyDown}
+                    className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white text-right focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                {suffix && <span className="text-xs text-gray-500 w-4">{suffix}</span>}
+            </div>
+        </div>
+    );
+}, (prevProps, nextProps) => {
+    // onCommitの変化は無視し、name/label/suffixのみ比較
+    return prevProps.name === nextProps.name &&
+           prevProps.label === nextProps.label &&
+           prevProps.suffix === nextProps.suffix;
+});
+
 export function RightSidebar({
     collapsed,
     onToggle,
@@ -24,6 +97,7 @@ export function RightSidebar({
     activeTab,
 }: RightSidebarProps) {
     const [panel, setPanel] = useState<PanelMode>('env');
+    const [resetKey, setResetKey] = useState(0);
 
     // activeTab切り替え時に自動でパネルを切り替える
     // Matrix: 詳細 (選択したキャラなどを見たい)
@@ -36,33 +110,14 @@ export function RightSidebar({
         }
     }, [activeTab]);
 
-    // analysisタブ以外では詳細パネルを強制的に表示するなどの制御が必要ならここで行う
-    // 今回はユーザーが切り替えられるようにしておく
+    const handleEnvCommit = useCallback((name: string, value: number) => {
+        onEnvChange({ ...env, [name]: value });
+    }, [env, onEnvChange]);
 
-    const Field = ({
-        label,
-        name,
-        value,
-        suffix = '',
-    }: {
-        label: string;
-        name: keyof EnvironmentSettings;
-        value: number;
-        suffix?: string;
-    }) => (
-        <div className="flex items-center justify-between py-1.5">
-            <span className="text-xs text-gray-400">{label}</span>
-            <div className="flex items-center gap-1">
-                <input
-                    type="number"
-                    value={value}
-                    onChange={(e) => onEnvChange({ ...env, [name]: Number(e.target.value) })}
-                    className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-white text-right focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                {suffix && <span className="text-xs text-gray-500 w-4">{suffix}</span>}
-            </div>
-        </div>
-    );
+    const handleReset = () => {
+        setResetKey(k => k + 1);
+        onEnvReset();
+    };
 
     if (collapsed) {
         return (
@@ -98,46 +153,46 @@ export function RightSidebar({
                                 <span>⚙</span> 環境設定
                             </span>
                             <button
-                                onClick={onEnvReset}
+                                onClick={handleReset}
                                 className="text-[10px] text-gray-500 hover:text-red-400 px-2 py-1 rounded hover:bg-gray-800 transition-colors"
                             >
                                 リセット
                             </button>
                         </div>
 
-                        <div className="space-y-4">
+                        <div key={resetKey} className="space-y-4">
                             <div>
                                 <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 font-medium">攻撃補正</div>
                                 <div className="space-y-1">
-                                    <Field label="攻撃 (%)" name="attackPercent" value={env.attackPercent} suffix="%" />
-                                    <Field label="与ダメ (%)" name="damageDealt" value={env.damageDealt} suffix="%" />
-                                    <Field label="被ダメ (%)" name="damageTaken" value={env.damageTaken} suffix="%" />
-                                    <Field label="倍率 (乗算)" name="damageMultiplier" value={env.damageMultiplier} suffix="×" />
+                                    <EnvField label="攻撃 (%)" name="attackPercent" initialValue={env.attackPercent} suffix="%" onCommit={handleEnvCommit} />
+                                    <EnvField label="与ダメ (%)" name="damageDealt" initialValue={env.damageDealt} suffix="%" onCommit={handleEnvCommit} />
+                                    <EnvField label="被ダメ (%)" name="damageTaken" initialValue={env.damageTaken} suffix="%" onCommit={handleEnvCommit} />
+                                    <EnvField label="倍率 (乗算)" name="damageMultiplier" initialValue={env.damageMultiplier} suffix="×" onCommit={handleEnvCommit} />
                                 </div>
                             </div>
 
                             <div>
                                 <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 font-medium">特殊効果</div>
                                 <div className="space-y-1">
-                                    <Field label="鼓舞 (固定値)" name="inspireFlat" value={env.inspireFlat} />
-                                    <Field label="効果重複 (%)" name="duplicateBuff" value={env.duplicateBuff} suffix="%" />
+                                    <EnvField label="鼓舞 (固定値)" name="inspireFlat" initialValue={env.inspireFlat} onCommit={handleEnvCommit} />
+                                    <EnvField label="効果重複 (%)" name="duplicateBuff" initialValue={env.duplicateBuff} suffix="%" onCommit={handleEnvCommit} />
                                 </div>
                             </div>
 
                             <div>
                                 <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 font-medium">速度関連</div>
                                 <div className="space-y-1">
-                                    <Field label="攻撃速度 (%)" name="attackSpeed" value={env.attackSpeed} suffix="%" />
-                                    <Field label="隙短縮 (%)" name="gapReduction" value={env.gapReduction} suffix="%" />
+                                    <EnvField label="攻撃速度 (%)" name="attackSpeed" initialValue={env.attackSpeed} suffix="%" onCommit={handleEnvCommit} />
+                                    <EnvField label="隙短縮 (%)" name="gapReduction" initialValue={env.gapReduction} suffix="%" onCommit={handleEnvCommit} />
                                 </div>
                             </div>
 
                             <div>
                                 <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 font-medium">敵ステータス</div>
                                 <div className="space-y-1">
-                                    <Field label="防御力" name="enemyDefense" value={env.enemyDefense} />
-                                    <Field label="防御デバフ (%)" name="defenseDebuffPercent" value={env.defenseDebuffPercent} suffix="%" />
-                                    <Field label="防御デバフ (固定)" name="defenseDebuffFlat" value={env.defenseDebuffFlat} />
+                                    <EnvField label="防御力" name="enemyDefense" initialValue={env.enemyDefense} onCommit={handleEnvCommit} />
+                                    <EnvField label="防御デバフ (%)" name="defenseDebuffPercent" initialValue={env.defenseDebuffPercent} suffix="%" onCommit={handleEnvCommit} />
+                                    <EnvField label="防御デバフ (固定)" name="defenseDebuffFlat" initialValue={env.defenseDebuffFlat} onCommit={handleEnvCommit} />
                                 </div>
                             </div>
                         </div>
