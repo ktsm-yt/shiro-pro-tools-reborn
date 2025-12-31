@@ -393,6 +393,45 @@ export interface DamageComparison {
 }
 
 /**
+ * ダメージ変動シナリオ
+ */
+export type DamageScenario =
+    | 'base'              // 条件なし
+    | 'enemy_hp_100'      // 敵HP100%
+    | 'enemy_hp_50'       // 敵HP50%
+    | 'enemy_hp_30'       // 敵HP30%
+    | 'enemy_hp_1'        // 敵HP1%（最大倍率）
+    | 'strategy_active'   // 計略発動中
+    | 'max_stacks';       // 最大スタック時
+
+/**
+ * 条件付きダメージ倍率
+ */
+export interface ConditionalMultiplier {
+    value: number;
+    condition: string;          // 表示用条件名
+    scenario: DamageScenario;   // シナリオタグ
+    source: 'skill' | 'strategy';
+    isHpDependent?: boolean;    // HP依存スケーリング
+    hpThreshold?: number;       // HP閾値（%）
+    maxMultiplier?: number;     // HP依存時の最大倍率
+}
+
+/**
+ * ダメージレンジ（変動幅）
+ */
+export interface DamageRange {
+    base: DamageCalculationResult;     // 条件なし
+    max: DamageCalculationResult;      // 全条件発動
+    scenarios: {
+        scenario: DamageScenario;
+        label: string;
+        result: DamageCalculationResult;
+    }[];
+    conditionalMultipliers: ConditionalMultiplier[];
+}
+
+/**
  * 編成データ（ダメージ計算用）
  */
 export interface FormationData {
