@@ -87,7 +87,7 @@ export const VISUAL_STAT_KEYS: Stat[] = [
 ];
 
 // 固定値として別表示するstat（%とは別に表示）
-export const FLAT_STAT_KEYS: Stat[] = ['attack', 'defense', 'range', 'cost_giant'];
+export const FLAT_STAT_KEYS: Stat[] = ['attack', 'defense', 'range', 'cost_giant', 'cost_defeat_bonus', 'cost_enemy_defeat'];
 
 // 同キャラ内で合算するstat（特技+計略がスタック）
 export const SELF_STACKABLE_STATS: Stat[] = ['cost_gradual'];
