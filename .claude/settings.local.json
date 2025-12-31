@@ -1,14 +1,27 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run build:*)",
-      "Bash(npm test:*)",
-      "Bash(tree:*)",
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(git worktree:*)",
+      "Bash(npm install)",
+      "WebFetch(domain:scre.swiki.jp)",
+      "Bash(npm test)",
+      "Bash(npx tsc:*)",
+      "Bash(git -C /Users/i/Dev/shiro-pro-tools-reborn-import status)",
       "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: 3色スタックバー表示とパーサー改善\n\n- BuffMatrix: 3色スタックバー表示（黄:効果重複→緑:味方にも→青:自分だけ）\n- BuffMatrix: 各色の%値をバー下に表示\n- BuffMatrix: 伏兵バッジ（オレンジ）追加\n- visualBuffMatrix: isSelfOnly/isDuplicate/requiresAmbush追跡\n- patterns.ts: 全角％対応（Wiki形式）\n- patterns.ts: 複合パターン対応（攻撃と防御1.2倍等）\n- patterns.ts: flat_sumパターンを厳格化（が|を|+必須）\n- CharacterSidebar: キャラ削除機能追加\n- WikiImporter: インポート後自動で編成に追加\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(npm test:*)",
+      "Bash(cat:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
-    ],
-    "deny": [],
-    "ask": []
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm run dev:*)",
+      "Bash(git checkout:*)",
+      "Bash(git stash:*)"
+    ]
   }
 }

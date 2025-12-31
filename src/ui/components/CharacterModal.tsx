@@ -48,11 +48,26 @@ export function CharacterModal({ character, isOpen, onClose, currentBuffs }: Cha
             ✕
           </button>
           <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl border ${meta.border} ${meta.light}`}>
-              {weapon.icon}
-            </div>
+            {/* Character Image or Weapon Icon */}
+            {character.imageUrl ? (
+              <img
+                src={character.imageUrl}
+                alt={character.name}
+                className={`w-14 h-14 object-cover rounded-xl border-2 ${meta.border}`}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-2xl border ${meta.border} ${meta.light}`}>
+                {weapon.icon}
+              </div>
+            )}
             <div>
-              <div className="text-sm text-gray-300">{meta.label}・{weapon.name}</div>
+              <div className="text-sm text-gray-300">
+                {character.rarity && <span className="mr-2">{character.rarity}</span>}
+                {meta.label}・{weapon.name}
+              </div>
               <h3 className="text-2xl font-bold leading-tight">{character.name}</h3>
             </div>
           </div>
@@ -66,16 +81,15 @@ export function CharacterModal({ character, isOpen, onClose, currentBuffs }: Cha
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {Object.entries(currentBuffs).map(([stat, cell]) => {
                   if (!cell) return null;
-                  const total = cell.self + cell.ally + cell.strategy;
-                  if (total === 0) return null;
+                  if (cell.maxValue === 0) return null;
                   return (
                     <div key={stat} className="flex items-center justify-between bg-gray-900/60 rounded-lg px-3 py-2 border border-gray-700">
                       <span className="text-sm text-gray-300">{stat}</span>
-                      <span className="text-sm font-mono text-white">+{total}</span>
+                      <span className="text-sm font-mono text-white">+{Math.round(cell.maxValue)}</span>
                     </div>
                   );
                 })}
-                {Object.values(currentBuffs).filter(Boolean).every((c) => (c as VisualBuffCell).self + (c as VisualBuffCell).ally + (c as VisualBuffCell).strategy === 0) && (
+                {Object.values(currentBuffs).filter(Boolean).every((c) => (c as VisualBuffCell).maxValue === 0) && (
                   <p className="text-sm text-gray-500">現在受けているバフはありません</p>
                 )}
               </div>
@@ -134,6 +148,36 @@ export function CharacterModal({ character, isOpen, onClose, currentBuffs }: Cha
                     <p className="text-sm text-gray-200">
                       {strategy.stat} {strategy.value}{strategy.mode === 'percent_max' ? '%' : ''}
                       <span className="text-gray-400 text-xs ml-2">{strategy.mode}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {/* 特殊能力 */}
+          {character.specialAbilities?.length ? (
+            <section>
+              <h4 className="text-xs uppercase text-gray-400 tracking-wider mb-2">特殊能力</h4>
+              <div className="space-y-2">
+                {character.specialAbilities.map((special, i) => (
+                  <div key={special.id ?? i} className="bg-gradient-to-r from-orange-900/40 to-orange-800/40 rounded-lg p-3 border border-orange-700/50">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-orange-200">#{i + 1}</span>
+                      <span className="text-[11px] text-orange-300">{special.target}</span>
+                    </div>
+                    <p className="text-sm text-gray-200">
+                      {special.stat === 'skill_multiplier' ? (
+                        <>
+                          <span className="text-orange-200 font-semibold">特技効果 {special.value}×</span>
+                          <span className="text-gray-400 text-xs ml-2">（特技バフに適用）</span>
+                        </>
+                      ) : (
+                        <>
+                          {special.stat} {special.value}{special.mode === 'percent_max' ? '%' : ''}
+                          <span className="text-gray-400 text-xs ml-2">{special.mode}</span>
+                        </>
+                      )}
                     </p>
                   </div>
                 ))}

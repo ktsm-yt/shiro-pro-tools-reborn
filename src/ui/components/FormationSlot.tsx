@@ -38,7 +38,22 @@ export function FormationSlot({ index, character, onRemove, onOpenDetail }: Form
           >
             ✕
           </button>
-          <div className="text-3xl filter drop-shadow-md mb-1">{weapon?.icon}</div>
+
+          {/* Character Image or Weapon Icon */}
+          {character.imageUrl ? (
+            <img
+              src={character.imageUrl}
+              alt={character.name}
+              className="w-12 h-12 object-cover rounded-lg border border-gray-600 mb-1"
+              onError={(e) => {
+                // 画像読み込み失敗時は非表示にしてアイコンを表示
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="text-3xl filter drop-shadow-md mb-1">{weapon?.icon}</div>
+          )}
+
           <div className="w-full px-2 text-center">
             <div className="font-bold text-white text-sm truncate drop-shadow-sm">{character.name}</div>
             <div className="text-[10px] text-gray-300 opacity-80">{weapon?.name}</div>

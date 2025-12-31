@@ -281,7 +281,15 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                                     ))}
                                                 </ul>
                                             </div>
-                                            {/* 特殊能力テキストは現行モデルでは扱わない */}
+                                            <div>
+                                                <h4 className="font-bold text-gray-100 mb-1">特殊能力テキスト（採用）</h4>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-200 text-xs">
+                                                    {(previewCharacter.rawSpecialTexts ?? []).length === 0 && <li className="text-gray-500">なし</li>}
+                                                    {(previewCharacter.rawSpecialTexts ?? []).map((t, i) => (
+                                                        <li key={`raw-special-${i}`}>{t}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
                                         </div>
 
                                         <div>
@@ -299,7 +307,7 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {previewCharacter.skills.length === 0 && previewCharacter.strategies.length === 0 && (
+                                                        {previewCharacter.skills.length === 0 && previewCharacter.strategies.length === 0 && (previewCharacter.specialAbilities ?? []).length === 0 && (
                                                             <tr><td colSpan={6} className="text-center text-gray-500 py-2">なし</td></tr>
                                                         )}
                                                         {previewCharacter.skills.map((b, i) => (
@@ -334,11 +342,22 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                                                 </td>
                                                             </tr>
                                                         ))}
-                                                        {/* 特殊能力バフ行は非対応 */}
+                                                        {(previewCharacter.specialAbilities ?? []).map((b, i) => (
+                                                            <tr key={`special-buff-${b.id}`} className="border-t border-[#1f2a3d] bg-purple-900/20">
+                                                                <td className="px-2 py-1 text-gray-100">特殊#{i + 1}</td>
+                                                                <td className="px-2 py-1 text-gray-100">{b.stat}</td>
+                                                                <td className="px-2 py-1 text-gray-100">{b.mode}</td>
+                                                                <td className="px-2 py-1 text-gray-100">{b.value}</td>
+                                                                <td className="px-2 py-1 text-gray-100">{b.target}</td>
+                                                                <td className="px-2 py-1 text-center">
+                                                                    <input type="checkbox" checked={b.isActive} disabled />
+                                                                </td>
+                                                            </tr>
+                                                        ))}
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            <p className="text-[11px] text-gray-500 mt-1">※ インポート直後は安全のためすべて off にしています。</p>
+                                            <p className="text-[11px] text-gray-500 mt-1">※ 特技・計略・特殊能力すべて発動前提でON</p>
                                         </div>
                                     </div>
                                 )}

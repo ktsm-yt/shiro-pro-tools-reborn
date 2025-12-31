@@ -16,9 +16,10 @@ import { getAttributeMeta, isRangedWeapon } from './ui/constants/meta';
 import { loadCharacters } from './core/storage';
 import { FormationSaveModal } from './ui/components/FormationSaveModal';
 import { ConfirmModal } from './ui/components/ConfirmModal';
+import { checkMapConstraints, type MapConstraints } from './core/logic/mapConstraints';
 
 // Simple Formation Saver UI Component
-import { Save, FolderOpen, Trash2 } from 'lucide-react';
+import { Save, FolderOpen, Trash2, AlertTriangle } from 'lucide-react';
 
 type ActiveTab = 'matrix' | 'analysis';
 
@@ -40,6 +41,10 @@ export default function App() {
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [isDeleteCharacterConfirmOpen, setIsDeleteCharacterConfirmOpen] = useState(false);
   const [characterToDelete, setCharacterToDelete] = useState<Character | null>(null);
+  const [mapConstraint, setMapConstraint] = useState<MapConstraints | null>(null);
+  const [terrainSlots, setTerrainSlots] = useState<Record<string, number | null>>({});
+  const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
+  const mapSettingsRef = useRef<HTMLDivElement | null>(null);
 
   const loadMenuRef = useRef<HTMLDivElement | null>(null);
   const isSessionRestoredRef = useRef(false);
@@ -58,7 +63,6 @@ export default function App() {
 
   // Load last formation on mount (Auto-load)
   useEffect(() => {
-    // Implement auto-save of CURRENT slots for better UX.
     const savedSlotsJson = localStorage.getItem('shiropro_reborn_current_slots');
     if (savedSlotsJson) {
       try {
@@ -133,6 +137,12 @@ export default function App() {
   const activeChars = useMemo(() => formation.slots.filter((c): c is Character => Boolean(c)), [formation]);
   const formationIds = useMemo(() => activeChars.map(c => c.id), [activeChars]);
   const visualMatrix = useMemo(() => buildVisualBuffMatrix(formation), [formation]);
+
+  // マップ制約チェック
+  const constraintResult = useMemo(() => {
+    if (!mapConstraint) return null;
+    return checkMapConstraints(formation, mapConstraint);
+  }, [formation, mapConstraint]);
 
   // Damage Calculation
   const { results, comparisons } = useDamageCalculation(activeChars, env);
@@ -304,6 +314,26 @@ export default function App() {
     };
   }, [isLoadMenuOpen]);
 
+  // Close map settings on outside click / Esc
+  useEffect(() => {
+    if (!isMapSettingsOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (!mapSettingsRef.current) return;
+      if (!mapSettingsRef.current.contains(e.target as Node)) {
+        setIsMapSettingsOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMapSettingsOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isMapSettingsOpen]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-gray-100 overflow-hidden font-sans">
 
@@ -338,6 +368,109 @@ export default function App() {
             </div>
             <span className="w-px h-3 bg-gray-700"></span>
             <span><span className="text-white font-medium">{summary.total}</span>/8</span>
+          </div>
+
+          {/* Map Settings Button + Popover */}
+          <div className="relative" ref={mapSettingsRef}>
+            <button
+              onClick={() => setIsMapSettingsOpen(!isMapSettingsOpen)}
+              className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-lg border transition-colors ${
+                isMapSettingsOpen
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              <span>🗺️</span>
+              <span>マップ</span>
+              {constraintResult && !constraintResult.isValid && (
+                <AlertTriangle size={12} className="text-red-400" />
+              )}
+            </button>
+            {isMapSettingsOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl p-3 z-50 min-w-[180px]">
+                <div className="text-xs text-gray-400 mb-2">配置制約</div>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-300 w-6">近</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={8}
+                      value={mapConstraint?.meleeSlots ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        if (val === null && !mapConstraint?.rangedSlots) {
+                          setMapConstraint(null);
+                        } else {
+                          setMapConstraint(prev => ({ meleeSlots: val ?? 0, rangedSlots: prev?.rangedSlots ?? 0 }));
+                        }
+                      }}
+                      placeholder="−"
+                      className="w-12 bg-gray-900 border border-gray-600 text-xs text-center text-gray-200 rounded px-1 py-1 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-300 w-6">遠</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={8}
+                      value={mapConstraint?.rangedSlots ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        if (val === null && !mapConstraint?.meleeSlots) {
+                          setMapConstraint(null);
+                        } else {
+                          setMapConstraint(prev => ({ meleeSlots: prev?.meleeSlots ?? 0, rangedSlots: val ?? 0 }));
+                        }
+                      }}
+                      placeholder="−"
+                      className="w-12 bg-gray-900 border border-gray-600 text-xs text-center text-gray-200 rounded px-1 py-1 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="border-t border-gray-700 pt-2">
+                  <div className="text-xs text-gray-400 mb-2">地形スロット</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['平', '平山', '山', '水', '無'].map((t) => (
+                      <div key={t} className="flex items-center gap-1.5">
+                        <span className="text-xs text-gray-300 w-6">{t}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={8}
+                          value={terrainSlots[t] ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                            setTerrainSlots(prev => ({ ...prev, [t]: val }));
+                          }}
+                          placeholder="−"
+                          className="w-12 bg-gray-900 border border-gray-600 text-xs text-center text-gray-200 rounded px-1 py-1 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-3 pt-2 border-t border-gray-700 flex items-center justify-between">
+                  {constraintResult ? (
+                    <span className={`text-xs ${constraintResult.isValid ? 'text-green-400' : 'text-red-400'}`}>
+                      {constraintResult.isValid ? '✓ 配置OK' : constraintResult.warnings.join(', ')}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">未設定</span>
+                  )}
+                  <button
+                    onClick={() => {
+                      setMapConstraint(null);
+                      setTerrainSlots({});
+                    }}
+                    className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+                  >
+                    リセット
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -440,9 +573,12 @@ export default function App() {
                         <span>📊</span> バフ・マトリックス
                       </h2>
                       <div className="flex items-center gap-3 text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded-lg">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />自前</span>
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />味方</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />味方にも</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]" />効果重複</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />自分だけ</span>
                         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]" />計略</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]" />伏兵</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" />動的</span>
                       </div>
                     </div>
                     <BuffMatrix formation={formation} matrix={visualMatrix} onCharClick={onCharClick} />

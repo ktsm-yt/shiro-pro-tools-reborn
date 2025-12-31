@@ -42,6 +42,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     })();
 
     let weapon = 'Unknown';
+    let rarity: string | undefined;
 
     // 3. 画像抽出
     // メインテーブル内、またはページ内の name を含む画像を探索
@@ -154,7 +155,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         attack_speed: 0,
         attack_gap: 0,
         movement_speed: 0,
-        knockback: 0,
+        retreat: 0,
         target_count: 0,
         ki_gain: 0,
         damage_drain: 0,
@@ -214,9 +215,17 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
             // 武器種
             // ヘッダー・値の両方をチェックする（ヘッダーなしのテーブル対応）
+            const weaponPattern = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札)$/;
+            const weaponPatternLoose = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札)/;
+            // 表記揺れの正規化マップ
+            const weaponNormalize: Record<string, string> = {
+                '札': '法術',
+            };
             const checkWeapon = (text: string) => {
-                const cleanWeapon = text.replace(/\(.+?\)/g, '').trim();
-                if (/^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝)$/.test(cleanWeapon)) {
+                let cleanWeapon = text.replace(/\(.+?\)/g, '').trim();
+                if (weaponPattern.test(cleanWeapon)) {
+                    // 表記揺れを正規化
+                    cleanWeapon = weaponNormalize[cleanWeapon] ?? cleanWeapon;
                     if (weapon === 'Unknown') {
                         weapon = cleanWeapon;
                     }
@@ -225,8 +234,8 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
             const isWeaponRow =
                 /武器/.test(header) ||
                 /武器/.test(value) ||
-                /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝)/.test(header) ||
-                /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝)/.test(value) ||
+                weaponPatternLoose.test(header) ||
+                weaponPatternLoose.test(value) ||
                 (!header && !!value);
             if (allowWeaponOrAttrParse && weapon === 'Unknown' && isWeaponRow) {
                 checkWeapon(header);
@@ -238,9 +247,10 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                 const imgs = Array.from(valueTd.querySelectorAll('img'));
                 for (const img of imgs) {
                     const alt = img.getAttribute('alt') || img.getAttribute('title') || '';
-                    const match = alt.match(/^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝)/);
+                    const match = alt.match(weaponPatternLoose);
                     if (match) {
-                        weapon = match[1];
+                        // 表記揺れを正規化
+                        weapon = weaponNormalize[match[1]] ?? match[1];
                         break;
                     }
                 }
@@ -291,6 +301,16 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                 if (attributes.length > 0) attributesLocked = true;
             }
 
+            // レアリティ (☆7, 曉, etc.)
+            const isRarityRow = /レアリティ/.test(header) || /^☆/.test(value) || /曉/.test(value);
+            if (allowWeaponOrAttrParse && !rarity && isRarityRow) {
+                // "☆7" or "曉" or "☆7(曉)" などをそのまま取得
+                const rarityMatch = value.match(/(☆\d+(?:\s*[\(（].+?[\)）])?|曉|暁)/);
+                if (rarityMatch) {
+                    rarity = rarityMatch[1];
+                }
+            }
+
             // ステータス
             const statMap: Record<string, string> = {
                 '耐久': 'hp',
@@ -330,18 +350,24 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
             // --- State Tracking for Sections ---
             if (tds.length === 1 && header === '') {
-                // Section Header (e.g., "特殊能力", "特技", "計略")
+                // Section Header (e.g., "特殊能力", "特技", "計略", "特殊攻撃")
                 const text = tds[0].textContent?.trim() || '';
                 if (text === '特技') currentSection = 'skill';
                 else if (text === '計略') currentSection = 'strategy';
                 else if (text === '特殊能力') currentSection = 'special';
+                else if (text === '特殊攻撃') currentSection = null; // 特殊攻撃は無視
             }
+
+            // 特殊攻撃は除外（特殊能力とは別のセクション）
+            const isSpecialAttack = header.includes('特殊攻撃') || (currentSection === null && header.includes('ストック'));
 
             // 特技・計略・特殊能力
             // headerに [無印] や [改壱] が含まれる場合、または "特技" "計略" "特殊能力" という単語が含まれる場合
             const isSkillOrStrategy =
-                header.includes('[無印]') || header.includes('[改壱]') || header.includes('[改弐]') ||
-                header.includes('特技') || header.includes('計略') || header.includes('特殊能力') || currentSection === 'special';
+                !isSpecialAttack && (
+                    header.includes('[無印]') || header.includes('[改壱]') || header.includes('[改弐]') ||
+                    header.includes('特技') || header.includes('計略') || header.includes('特殊能力') || currentSection === 'special'
+                );
 
             if (isSkillOrStrategy) {
                 // 計略判定: "気:" や "秒" が含まれる、またはヘッダーに"計略"が含まれる
@@ -352,12 +378,15 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                 // 説明文の抽出: 値セルだけでなく、その行の他のセルもチェック
                 // 構造: | ヘッダー | 名前 | 説明 |
 
-                // 行内のすべてのセルをチェックして、最も説明文らしいもの（長くて、計略パラメータでない）を探す
-                let bestCandidate = '';
-                let maxLength = 0;
+                // 行内のすべてのセルをチェックして、説明文を収集（<br>で分割された複数行を結合）
+                const allTexts: string[] = [];
 
-                tds.forEach(td => {
-                    // <br>で分割して、それぞれの行を候補として扱う
+                // バフ説明文と判断するためのキーワードパターン（数字を含むか、特定の効果語で終わる）
+                const buffDescriptionPattern = /\d|上昇|増加|低下|減少|軽減|延長|短縮|無効|回復|付与|発動|与える|なる|できる|になる|ダメージ|敵に|範囲内/;
+
+                // 複数のtdがある場合、最後のtdが説明文である可能性が高い
+                // 単一のtdの場合は<br>で分割されている可能性がある
+                const processCell = (td: Element) => {
                     const html = td.innerHTML;
                     const parts = html.split(/<br\s*\/?>/i);
 
@@ -368,22 +397,35 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                         const text = tempDiv.textContent?.trim() || '';
 
                         // 計略パラメータ（気:xx, 秒:xx）は除外
-                        // 短すぎるものも除外（名前など）
-                        if (text.includes('気:') || text.includes('秒:') || text.length < 5) return;
+                        if (text.includes('気:') || text.includes('秒:')) return;
 
-                        if (text.length > maxLength) {
-                            maxLength = text.length;
-                            bestCandidate = text;
-                        }
+                        // 短すぎるものは除外
+                        if (text.length < 5) return;
+
+                        // 十分長い文章（15文字以上）はバフ説明として扱う
+                        // 短いテキストはバフ説明パターンを含む場合のみ採用
+                        if (text.length < 15 && !buffDescriptionPattern.test(text)) return;
+
+                        allTexts.push(text);
                     });
-                });
+                };
 
-                // ある程度の長さがある場合、それを説明文として採用
-                if (maxLength > 5) {
+                // 複数のtdがある場合、最後のtd（説明文）のみを処理
+                // 単一のtdの場合はそれを処理（<br>で複数行の効果が含まれる可能性）
+                if (tds.length > 1) {
+                    // 最後のtdを処理（通常は説明文が入っている）
+                    processCell(tds[tds.length - 1]);
+                } else if (tds.length === 1) {
+                    processCell(tds[0]);
+                }
+
+                // すべてのテキストを結合して説明文とする
+                const combinedText = allTexts.join(' ');
+                if (combinedText.length > 5) {
                     const bucket = isSpecial ? specialCandidates : (isStrategy ? strategyCandidates : skillCandidates);
                     // 重複防止
-                    if (!bucket.some(c => c.text === bestCandidate)) {
-                        bucket.push({ text: bestCandidate, header });
+                    if (!bucket.some(c => c.text === combinedText)) {
+                        bucket.push({ text: combinedText, header });
                     }
                 }
             }
@@ -439,6 +481,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         weaponRange,
         weaponType,
         placement,
+        rarity,
         attributes: [...new Set(attributes)],
         baseStats,
         skillTexts: [...new Set(skillTexts)], // 重複排除
