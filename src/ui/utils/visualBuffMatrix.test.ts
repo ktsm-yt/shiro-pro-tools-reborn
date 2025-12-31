@@ -279,4 +279,140 @@ describe('buildVisualBuffMatrix', () => {
     // 非アクティブな場合は倍率が適用されない
     expect(matrix[char1.id]?.attack?.maxValue).toBe(20);
   });
+
+  it('should track cost_defeat_bonus as flat value from special ability', () => {
+    const char1: Character = {
+      id: 'char1',
+      name: '室町第',
+      type: 'castle_girl',
+      weapon: '歌舞',
+      weaponRange: '近',
+      weaponType: '物',
+      placement: '近',
+      attributes: ['平'],
+      seasonAttributes: [],
+      baseStats: { attack: 100, defense: 50, hp: 1000 },
+      skills: [],
+      strategies: [],
+      specialAbilities: [
+        {
+          id: 'special1',
+          stat: 'cost_defeat_bonus',
+          mode: 'flat_sum',
+          value: 1,
+          target: 'range',
+          source: 'special_ability',
+          isActive: true,
+        } as Buff,
+      ],
+      rawSkillTexts: [],
+      rawStrategyTexts: [],
+    };
+
+    const formation: Formation = {
+      id: 'formation1',
+      name: 'Test Formation',
+      slots: [char1],
+    };
+
+    const matrix = buildVisualBuffMatrix(formation);
+
+    // cost_defeat_bonus は maxFlat に集計される
+    const cell = matrix[char1.id]?.cost_defeat_bonus;
+    expect(cell).toBeDefined();
+    expect(cell?.maxFlat).toBe(1);
+    expect(cell?.hasSelfFlat).toBe(true); // sourceChar===targetChar → type='self'
+  });
+
+  it('should track cost_defeat_bonus from strategy with target range', () => {
+    const char1: Character = {
+      id: 'char1',
+      name: '室町第',
+      type: 'castle_girl',
+      weapon: '歌舞',
+      weaponRange: '近',
+      weaponType: '物',
+      placement: '近',
+      attributes: ['平'],
+      seasonAttributes: [],
+      baseStats: { attack: 100, defense: 50, hp: 1000 },
+      skills: [],
+      strategies: [
+        {
+          id: 'strategy1',
+          stat: 'cost_defeat_bonus',
+          mode: 'flat_sum',
+          value: 1,
+          target: 'range',
+          source: 'strategy',
+          isActive: true,
+        } as Buff,
+      ],
+      specialAbilities: [],
+      rawSkillTexts: [],
+      rawStrategyTexts: [],
+    };
+
+    const formation: Formation = {
+      id: 'formation1',
+      name: 'Test Formation',
+      slots: [char1],
+    };
+
+    const matrix = buildVisualBuffMatrix(formation);
+
+    // 計略由来の cost_defeat_bonus は maxFlat に集計
+    const cell = matrix[char1.id]?.cost_defeat_bonus;
+    expect(cell).toBeDefined();
+    expect(cell?.maxFlat).toBe(1);
+    expect(cell?.hasStrategyFlat).toBe(true);
+  });
+
+  it('should track cost_defeat_bonus from strategy with target self (室町第)', () => {
+    // 室町第の計略「最秘曲・啄木」は「射程内の城娘の撃破気が1増加（自分のみが対象）」
+    // → target='self' に上書きされる
+    const char1: Character = {
+      id: 'char1',
+      name: '室町第',
+      type: 'castle_girl',
+      weapon: '歌舞',
+      weaponRange: '近',
+      weaponType: '物',
+      placement: '近',
+      attributes: ['平'],
+      seasonAttributes: [],
+      baseStats: { attack: 100, defense: 50, hp: 1000 },
+      skills: [],
+      strategies: [
+        {
+          id: 'strategy1',
+          stat: 'cost_defeat_bonus',
+          mode: 'flat_sum',
+          value: 1,
+          target: 'self',  // (自分のみが対象) による上書き
+          source: 'strategy',
+          isActive: true,
+        } as Buff,
+      ],
+      specialAbilities: [],
+      rawSkillTexts: [],
+      rawStrategyTexts: [],
+    };
+
+    const formation: Formation = {
+      id: 'formation1',
+      name: 'Test Formation',
+      slots: [char1],
+    };
+
+    const matrix = buildVisualBuffMatrix(formation);
+
+    // target='self' の計略由来バフ
+    // buff.source === 'strategy' なので type='strategy' になる
+    const cell = matrix[char1.id]?.cost_defeat_bonus;
+    expect(cell).toBeDefined();
+    expect(cell?.maxFlat).toBe(1);
+    // source='strategy' なので type='strategy' → hasStrategyFlat
+    expect(cell?.hasStrategyFlat).toBe(true);
+  });
 });

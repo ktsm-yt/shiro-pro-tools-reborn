@@ -273,11 +273,115 @@ describe('analyzeBuffText', () => {
 
             // enemy_range (敵の射程デバフ) があること
             expect(result.find(b => b.stat === 'enemy_range')).toBeDefined();
+            // enemy_damage_dealt (敵の与ダメ低下) があること
+            expect(result.find(b => b.stat === 'enemy_damage_dealt')).toBeDefined();
 
             // range (正のバフ) がないこと
             const rangeBuffs = result.filter(b => b.stat === 'range');
             expect(rangeBuffs).toHaveLength(0);
+
+            // damage_dealt (正の与ダメバフ) がないこと
+            const damageBuffs = result.filter(b => b.stat === 'damage_dealt');
+            expect(damageBuffs).toHaveLength(0);
         });
+
+        it('should parse "対象の射程が1.3倍" as 30% range buff with target ally', () => {
+            // 計略のパターン: 対象の射程が1.3倍
+            const text = '対象の射程が1.3倍';
+            const result = analyzeBuffText(text);
+
+            expect(result).toHaveLength(1);
+            expect(result[0].stat).toBe('range');
+            expect(result[0].mode).toBe('percent_max');
+            expect(result[0].value).toBeCloseTo(30, 5); // 1.3 - 1 = 0.3 = 30%
+            expect(result[0].target).toBe('ally'); // 「対象」= ally
+        });
+    });
+});
+
+describe('analyzeCharacter - strategy target from parentheses', () => {
+    it('should set target to self when strategy has (自分のみが対象)', () => {
+        const rawData: RawCharacterData = {
+            name: 'テスト',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['30秒間対象の射程が1.3倍（自分のみが対象）'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        expect(character.strategies).toHaveLength(1);
+        expect(character.strategies[0].stat).toBe('range');
+        expect(character.strategies[0].target).toBe('self'); // ()内で自分指定 → self
+    });
+
+    it('should NOT override enemy debuff targets even with (自分のみが対象)', () => {
+        // 室町第の計略パターン: 自分バフ + 敵デバフ
+        const rawData: RawCharacterData = {
+            name: 'テスト',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['30秒間対象の射程が1.3倍。射程内の敵の被ダメージが50%上昇（自分のみが対象）'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 射程バフは self
+        const rangeBuff = character.strategies.find(b => b.stat === 'range');
+        expect(rangeBuff?.target).toBe('self');
+
+        // 敵デバフは range（射程内の敵）のまま
+        const enemyDebuff = character.strategies.find(b => b.stat === 'enemy_damage_taken');
+        expect(enemyDebuff?.target).toBe('range'); // 敵バフは上書きしない
+    });
+
+    it('should keep original target when no parentheses override', () => {
+        const rawData: RawCharacterData = {
+            name: 'テスト',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['射程内の城娘の攻撃が20%上昇'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        expect(character.strategies).toHaveLength(1);
+        expect(character.strategies[0].stat).toBe('attack');
+        expect(character.strategies[0].target).toBe('range'); // 元のtargetを維持
+    });
+
+    it('should extract cost_defeat_bonus from strategy (室町第)', () => {
+        // 室町第の計略「最秘曲・啄木」の実際のテキスト
+        // 注: Wikiの実際のテキストは (同種効果の重複無し) であり、(自分のみが対象) ではない
+        const rawData: RawCharacterData = {
+            name: '室町第',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['60秒間特技効果が1.25倍、射程内の殿と城娘を継続回復し、敵に継続的にダメージを与える射程内の城娘の撃破気が1増加(同種効果の重複無し)'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 撃破気 (cost_defeat_bonus) が抽出されること
+        const defeatBonus = character.strategies.find(b => b.stat === 'cost_defeat_bonus');
+        expect(defeatBonus).toBeDefined();
+        expect(defeatBonus?.value).toBe(1);
+        expect(defeatBonus?.mode).toBe('flat_sum');
+        expect(defeatBonus?.source).toBe('strategy');
+        // (同種効果の重複無し) は target 上書きしないので range のまま
+        expect(defeatBonus?.target).toBe('range');
     });
 });
 
@@ -328,6 +432,31 @@ describe('analyzeCharacter', () => {
         expect(character.skills[0].stat).toBe('attack');
         expect(character.skills[1].stat).toBe('defense');
         expect(character.skills[1].target).toBe('range');
+    });
+
+    it('should extract cost_defeat_bonus from specialTexts (室町第)', () => {
+        // 室町第の特殊能力「最秘曲・啄木」
+        // 撃破気が1増加は特殊能力（special ability）として格納される
+        const rawData: RawCharacterData = {
+            name: '室町第',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: [],
+            specialTexts: ['60秒間特技効果が1.25倍、射程内の殿と城娘を継続回復し、敵に継続的にダメージを与える射程内の城娘の撃破気が1増加(同種効果の重複無し)'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 特殊能力からの撃破気
+        const defeatBonus = character.specialAbilities.find(b => b.stat === 'cost_defeat_bonus');
+        expect(defeatBonus).toBeDefined();
+        expect(defeatBonus?.value).toBe(1);
+        expect(defeatBonus?.mode).toBe('flat_sum');
+        expect(defeatBonus?.source).toBe('special_ability');
+        expect(defeatBonus?.target).toBe('range');
     });
 
     // 他 stat は今後の拡張で追加

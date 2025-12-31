@@ -15,8 +15,8 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
     key: 'resource', name: '気・計略', icon: '⚡', stats: [
       { key: 'cost', name: '自然気', icon: '⚡' },
       { key: 'cost_gradual', name: '徐々気', icon: '💧' },
-      { key: 'cost_enemy_defeat', name: '気(牛)', icon: '🐄' },
-      { key: 'cost_defeat_bonus', name: '気(ノビ)', icon: '🌱' },
+      { key: 'cost_enemy_defeat', name: '気(牛)', icon: '🐄', isFlat: true },
+      { key: 'cost_defeat_bonus', name: '気(ノビ)', icon: '🌱', isFlat: true },
       { key: 'cost_giant', name: '気軽減%', icon: '💨' },
       { key: 'cost_giant', name: '気軽減-', icon: '💨', isFlat: true },
       { key: 'cost_strategy', name: '計略気-', icon: '📜' },
