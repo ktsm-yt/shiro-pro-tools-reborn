@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import type { Character, DamageCalculationResult, EnvironmentSettings, DamageBreakdown, Buff } from '../../core/types';
-import { calculateDamage } from '../../core/logic/damageCalculator';
+import type { Character, DamageCalculationResult, EnvironmentSettings, DamageBreakdown, Buff, DamageRange } from '../../core/types';
+import { calculateDamage, calculateDamageRange } from '../../core/logic/damageCalculator';
 
 interface DamageDetailModalProps {
     character: Character;
@@ -209,6 +209,11 @@ export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailM
         return calculateDamage(character, baseEnv);
     }, [character, baseEnv]);
 
+    // ダメージレンジ計算
+    const damageRange: DamageRange = useMemo(() => {
+        return calculateDamageRange(character, baseEnv);
+    }, [character, baseEnv]);
+
     // ダメージ倍率と条件を抽出
     const multipliers = useMemo(() => extractMultipliers(character), [character]);
 
@@ -275,6 +280,59 @@ export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailM
                             </div>
                         </div>
                     </div>
+
+                    {/* ダメージ変動（シナリオ別DPS） */}
+                    {damageRange.scenarios.length > 0 && (
+                        <div>
+                            <div className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-medium">
+                                ダメージ変動（シナリオ別）
+                            </div>
+                            <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700 space-y-3">
+                                {/* ベースDPS */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-24 text-xs text-gray-400">基本</div>
+                                    <div className="flex-1 h-5 bg-gray-700/50 rounded overflow-hidden">
+                                        <div
+                                            className="h-full bg-gray-500 rounded"
+                                            style={{ width: `${(damageRange.base.dps / damageRange.max.dps) * 100}%` }}
+                                        />
+                                    </div>
+                                    <div className="w-20 text-right text-sm font-mono text-gray-300">
+                                        {fmt(damageRange.base.dps)}
+                                    </div>
+                                </div>
+                                {/* 各シナリオ */}
+                                {damageRange.scenarios.map((s, i) => {
+                                    const ratio = (s.result.dps / damageRange.max.dps) * 100;
+                                    const isMax = s.result.dps === damageRange.max.dps;
+                                    return (
+                                        <div key={i} className="flex items-center gap-3">
+                                            <div className="w-24 text-xs text-gray-400">{s.label}</div>
+                                            <div className="flex-1 h-5 bg-gray-700/50 rounded overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded ${isMax ? 'bg-yellow-500' : 'bg-blue-500'}`}
+                                                    style={{ width: `${ratio}%` }}
+                                                />
+                                            </div>
+                                            <div className={`w-20 text-right text-sm font-mono ${isMax ? 'text-yellow-400 font-bold' : 'text-gray-300'}`}>
+                                                {fmt(s.result.dps)}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {/* 変動幅表示 */}
+                                <div className="pt-2 border-t border-gray-700/50 text-xs text-gray-500 flex justify-between">
+                                    <span>変動幅</span>
+                                    <span>
+                                        {fmt(damageRange.base.dps)} ～ {fmt(damageRange.max.dps)}
+                                        <span className="ml-2 text-green-400">
+                                            (+{((damageRange.max.dps / damageRange.base.dps - 1) * 100).toFixed(0)}%)
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* 鼓舞量 */}
                     {result.inspireAmount && (
