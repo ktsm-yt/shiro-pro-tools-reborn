@@ -318,6 +318,29 @@ describe('analyzeCharacter - strategy target from parentheses', () => {
         expect(character.strategies[0].target).toBe('self'); // ()内で自分指定 → self
     });
 
+    it('should NOT override enemy debuff targets even with (自分のみが対象)', () => {
+        // 室町第の計略パターン: 自分バフ + 敵デバフ
+        const rawData: RawCharacterData = {
+            name: 'テスト',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['30秒間対象の射程が1.3倍。射程内の敵の被ダメージが50%上昇（自分のみが対象）'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 射程バフは self
+        const rangeBuff = character.strategies.find(b => b.stat === 'range');
+        expect(rangeBuff?.target).toBe('self');
+
+        // 敵デバフは range（射程内の敵）のまま
+        const enemyDebuff = character.strategies.find(b => b.stat === 'enemy_damage_taken');
+        expect(enemyDebuff?.target).toBe('range'); // 敵バフは上書きしない
+    });
+
     it('should keep original target when no parentheses override', () => {
         const rawData: RawCharacterData = {
             name: 'テスト',

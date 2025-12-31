@@ -197,7 +197,9 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
         const buffTemplates = analyzeBuffText(strategyText);
         for (const template of buffTemplates) {
             // 計略の()内で「自分」指定の場合、targetを'self'に上書き
-            const finalTarget = strategyTargetOverride === 'self' ? 'self' : template.target;
+            // ただし敵デバフ（enemy_*）は射程内の敵が対象なので上書きしない
+            const isEnemyDebuff = template.stat.startsWith('enemy_');
+            const finalTarget = (strategyTargetOverride === 'self' && !isEnemyDebuff) ? 'self' : template.target;
             strategies.push({
                 id: `buff_${buffIdCounter++}`,
                 ...template,
