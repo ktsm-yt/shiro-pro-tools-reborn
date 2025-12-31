@@ -153,6 +153,7 @@ function detectDynamicBuff(text: string, value: number): Partial<ParsedBuff> | n
  * 並列表記を展開する
  * 例: "攻撃と防御が30%上昇" → ["攻撃が30%上昇", "防御が30%上昇"]
  * 例: "防御・移動速度が30%低下" → ["防御が30%低下", "移動速度が30%低下"]
+ * 例: "与ダメージ/攻撃速度2.5倍" → ["与ダメージ2.5倍", "攻撃速度2.5倍"]
  */
 function expandParallelStats(line: string): string[] {
     // 鼓舞パターン（自身の攻撃と防御の○%...加算）は展開しない
@@ -161,9 +162,11 @@ function expandParallelStats(line: string): string[] {
     }
 
     // 並列パターンの検出
-    // 注意: 長いパターン（攻撃速度、移動速度）を先に配置すること
-    const statPattern = '攻撃速度|移動速度|攻撃(?:力)?|防御(?:力)?|射程|回復|耐久|与ダメ(?:ージ)?|被ダメ(?:ージ)?';
+    // 注意: 長いパターン（攻撃速度、移動速度、与ダメージ）を先に配置すること
+    const statPattern = '与ダメ(?:ージ)?|被ダメ(?:ージ)?|攻撃速度|移動速度|攻撃(?:力)?|防御(?:力)?|射程|回復|耐久';
     const parallelPatterns = [
+        // 「与ダメージ/攻撃速度」のスラッシュ区切りパターン
+        new RegExp(`(?<stat1>${statPattern})(?:/|／)(?<stat2>${statPattern})(?:/|／)?(?<stat3>${statPattern})?(?:が|を)?`, 'g'),
         // 「攻撃と防御」「攻撃・防御」のパターン
         new RegExp(`(?<stat1>${statPattern})(?:と|・|、)(?<stat2>${statPattern})(?:と|・|、)?(?<stat3>${statPattern})?(?:が|を|の)?`, 'g'),
     ];
