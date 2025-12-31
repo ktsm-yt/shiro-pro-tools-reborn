@@ -358,6 +358,30 @@ describe('analyzeCharacter - strategy target from parentheses', () => {
         expect(character.strategies[0].stat).toBe('attack');
         expect(character.strategies[0].target).toBe('range'); // 元のtargetを維持
     });
+
+    it('should extract cost_defeat_bonus from strategy (室町第)', () => {
+        // 室町第の計略「最秘曲・啄木」の実際のテキスト
+        const rawData: RawCharacterData = {
+            name: '室町第',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: ['60秒間特技効果が1.25倍、射程内の殿と城娘を継続回復し、敵に継続的にダメージを与える。射程内の城娘の撃破気が1増加（自分のみが対象）'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 撃破気 (cost_defeat_bonus) が抽出されること
+        const defeatBonus = character.strategies.find(b => b.stat === 'cost_defeat_bonus');
+        expect(defeatBonus).toBeDefined();
+        expect(defeatBonus?.value).toBe(1);
+        expect(defeatBonus?.mode).toBe('flat_sum');
+        expect(defeatBonus?.source).toBe('strategy');
+        // (自分のみが対象) で target が 'self' に上書きされる
+        expect(defeatBonus?.target).toBe('self');
+    });
 });
 
 describe('analyzeCharacter', () => {
