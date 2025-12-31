@@ -90,8 +90,9 @@ export const patterns: ParsedPattern[] = [
     { stat: 'cost', mode: 'percent_max', regex: /自然に気(?:が)?増加/, valueTransform: () => 40 },
     { stat: 'cost', mode: 'flat_sum', regex: /気トークン(?:が)?\s*(\d+)増加/ },
     // 気(牛)（「敵」を含む：敵撃破時の獲得気増加）
-    // "敵撃破時の獲得気が2増加" "敵の撃破気+1"
-    { stat: 'cost_enemy_defeat', mode: 'flat_sum', regex: /敵.*?撃破.*?(?:獲得)?気(?:が)?\s*[+]?(\d+)/ },
+    // "敵撃破時の獲得気が2増加" "敵の撃破気+1" "自身の敵撃破時の獲得気が2増加"
+    // 注: 「敵」と「撃破」が近接している必要がある（「敵に継続的にダメージ...撃破気」は誤検出）
+    { stat: 'cost_enemy_defeat', mode: 'flat_sum', regex: /敵(?:の)?撃破(?:時)?(?:の)?(?:獲得)?気(?:が)?\s*[+]?(\d+)/ },
     // 気(ノビ)（「敵」を含まない：味方の撃破気増加）
     // "射程内の城娘の撃破気が1増加" "撃破獲得気2増加"
     { stat: 'cost_defeat_bonus', mode: 'flat_sum', regex: /(?:城娘|味方|自身)の撃破気(?:が)?\s*[+]?(\d+)/ },

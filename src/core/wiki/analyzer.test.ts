@@ -361,6 +361,7 @@ describe('analyzeCharacter - strategy target from parentheses', () => {
 
     it('should extract cost_defeat_bonus from strategy (室町第)', () => {
         // 室町第の計略「最秘曲・啄木」の実際のテキスト
+        // 注: Wikiの実際のテキストは (同種効果の重複無し) であり、(自分のみが対象) ではない
         const rawData: RawCharacterData = {
             name: '室町第',
             url: 'http://example.com',
@@ -368,7 +369,7 @@ describe('analyzeCharacter - strategy target from parentheses', () => {
             attributes: ['平'],
             baseStats: {},
             skillTexts: [],
-            strategyTexts: ['60秒間特技効果が1.25倍、射程内の殿と城娘を継続回復し、敵に継続的にダメージを与える。射程内の城娘の撃破気が1増加（自分のみが対象）'],
+            strategyTexts: ['60秒間特技効果が1.25倍、射程内の殿と城娘を継続回復し、敵に継続的にダメージを与える射程内の城娘の撃破気が1増加(同種効果の重複無し)'],
         };
 
         const character = analyzeCharacter(rawData);
@@ -379,8 +380,8 @@ describe('analyzeCharacter - strategy target from parentheses', () => {
         expect(defeatBonus?.value).toBe(1);
         expect(defeatBonus?.mode).toBe('flat_sum');
         expect(defeatBonus?.source).toBe('strategy');
-        // (自分のみが対象) で target が 'self' に上書きされる
-        expect(defeatBonus?.target).toBe('self');
+        // (同種効果の重複無し) は target 上書きしないので range のまま
+        expect(defeatBonus?.target).toBe('range');
     });
 });
 
