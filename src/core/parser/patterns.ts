@@ -59,6 +59,8 @@ export const patterns: ParsedPattern[] = [
     // 3. ダメージ系
     { stat: 'give_damage', mode: 'percent_max', regex: /(\d+(?:\.\d+)?)倍のダメージを与える/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: /攻撃の?(\d+(?:\.\d+)?)倍のダメージ/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    // 「与ダメージ2.5倍」「与えるダメージ1.3倍」などの倍率パターン
+    { stat: 'damage_dealt', mode: 'percent_max', regex: /与(?:える)?ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)`) },
     { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`^与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}`) },
     { stat: 'enemy_damage_taken', mode: 'percent_max', regex: new RegExp(`被ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:増加|上昇|アップ)`) },  // 敵の被ダメ上昇（攻撃貢献）
@@ -78,9 +80,11 @@ export const patterns: ParsedPattern[] = [
     { stat: 'attack_count', mode: 'flat_sum', regex: /攻撃回数(?:が)?\s*([+-]?\d+)/ },
 
     // 5. 速度・隙系
-    { stat: 'attack_speed', mode: 'percent_max', regex: new RegExp(`攻撃速度(?:が)?\\s*(\\d+)${PCT}`) },
+    // 「攻撃速度2.5倍」→ 150%増加として変換
+    { stat: 'attack_speed', mode: 'percent_max', regex: /攻撃速度(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    { stat: 'attack_speed', mode: 'percent_max', regex: new RegExp(`攻撃速度(?:が)?\\s*(\\d+)${PCT}(?!低下|減少)`) },
     { stat: 'attack_speed', mode: 'percent_max', regex: new RegExp(`攻撃速度(?:が)?\\s*(\\d+)${PCT}(?:低下|減少)`), valueTransform: m => -Number(m[1]) },
-    { stat: 'attack_gap', mode: 'percent_reduction', regex: new RegExp(`隙(?:が)?\\s*(\\d+)${PCT}(?:短縮|減少)`) },
+    { stat: 'attack_gap', mode: 'percent_reduction', regex: new RegExp(`(?:攻撃後の)?隙(?:が)?\\s*(\\d+)${PCT}(?:短縮|減少)`) },
     { stat: 'attack_gap', mode: 'percent_max', regex: new RegExp(`隙(?:が)?\\s*(\\d+)${PCT}増加`) },
 
     // 6. 気・計略系
