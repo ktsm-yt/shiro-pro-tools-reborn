@@ -1,10 +1,13 @@
-import type { Character, DamageCalculationResult, DamageComparison } from '../../core/types';
+import { useState } from 'react';
+import type { Character, DamageCalculationResult, DamageComparison, EnvironmentSettings } from '../../core/types';
 import { CompactCharacterCard } from './CompactCharacterCard';
+import { DamageDetailModal } from './DamageDetailModal';
 
 interface DamageAnalysisProps {
     characters: Character[];
     results: Record<string, DamageCalculationResult>;
     comparisons: Record<string, DamageComparison>;
+    env: EnvironmentSettings;
     onCharClick: (char: Character) => void;
     onRemove: (charId: string) => void;
 }
@@ -15,10 +18,17 @@ export function DamageAnalysis({
     characters,
     results,
     comparisons,
+    env,
     onCharClick,
     onRemove,
 }: DamageAnalysisProps) {
+    const [modalChar, setModalChar] = useState<Character | null>(null);
     const activeChars = characters;
+
+    const handleShowDetails = (char: Character) => {
+        setModalChar(char);
+        onCharClick(char);
+    };
 
     const totalDPS = Object.values(results).reduce((sum, r) => sum + (r?.dps || 0), 0);
     const baseTotalDPS = Object.values(comparisons).reduce((sum, comparison) => {
@@ -61,11 +71,20 @@ export function DamageAnalysis({
                         character={char}
                         result={results[char.id]}
                         comparison={comparisons[char.id]}
-                        onShowDetails={() => onCharClick(char)}
+                        onShowDetails={() => handleShowDetails(char)}
                         onRemove={() => onRemove(char.id)}
                     />
                 ))}
             </div>
+
+            {/* 詳細モーダル */}
+            {modalChar && (
+                <DamageDetailModal
+                    character={modalChar}
+                    baseEnv={env}
+                    onClose={() => setModalChar(null)}
+                />
+            )}
         </div>
     );
 }

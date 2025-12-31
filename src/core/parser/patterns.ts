@@ -59,8 +59,10 @@ export const patterns: ParsedPattern[] = [
     // 3. ダメージ系
     { stat: 'give_damage', mode: 'percent_max', regex: /(\d+(?:\.\d+)?)倍のダメージを与える/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: /攻撃の?(\d+(?:\.\d+)?)倍のダメージ/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    { stat: 'give_damage', mode: 'percent_max', regex: /与えるダメージ(?:が|を)?(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    { stat: 'damage_dealt', mode: 'percent_max', regex: /与ダメ(?:ージ)?(?:が|を)?(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}`) },
-    { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`^与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}`) },
+    { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}`) },
     { stat: 'enemy_damage_taken', mode: 'percent_max', regex: new RegExp(`被ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:増加|上昇|アップ)`) },  // 敵の被ダメ上昇（攻撃貢献）
     { stat: 'enemy_damage_taken', mode: 'percent_max', regex: /被ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, unit: '×', valueTransform: asPercentFromMultiplier },  // 敵の被ダメ倍（1.5倍→50%）
     { stat: 'damage_taken', mode: 'percent_max', regex: new RegExp(`被ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:軽減|低下|減少)`) },  // 自分の被ダメ軽減（防御）

@@ -592,6 +592,7 @@ export default function App() {
                     characters={activeChars}
                     results={results}
                     comparisons={comparisons}
+                    env={env}
                     onCharClick={onCharClick}
                     onRemove={(id) => removeCharacter(id)}
                   />
