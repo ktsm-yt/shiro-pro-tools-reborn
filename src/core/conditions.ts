@@ -131,7 +131,8 @@ export const CONDITION_DETECTION_PATTERNS: ConditionDetectionPattern[] = [
 
     // 対象種別
     { pattern: /伏兵(?:のみ|限定)?/i, tags: ['ambush'], priority: 75, exclusive: false, category: 'target_type' },
-    { pattern: /殿(?:のみ|限定)?/i, tags: ['lord'], priority: 75, exclusive: false, category: 'target_type' },
+    // 「殿のみ」「殿限定」は殿専用、「殿と城娘」などは含めない
+    { pattern: /殿(?:のみ|限定)/i, tags: ['lord'], priority: 75, exclusive: false, category: 'target_type' },
 
     // 敵種別
     { pattern: /飛行(?:敵|ユニット)(?:のみ|限定)?/i, tags: ['flying_enemy'], priority: 75, exclusive: false, category: 'enemy_type' },

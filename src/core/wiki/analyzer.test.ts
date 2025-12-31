@@ -434,6 +434,31 @@ describe('analyzeCharacter', () => {
         expect(character.skills[1].target).toBe('range');
     });
 
+    it('should extract cost_defeat_bonus from specialTexts (室町第)', () => {
+        // 室町第の特殊能力「最秘曲・啄木」
+        // 撃破気が1増加は特殊能力（special ability）として格納される
+        const rawData: RawCharacterData = {
+            name: '室町第',
+            url: 'http://example.com',
+            weapon: '歌舞',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [],
+            strategyTexts: [],
+            specialTexts: ['60秒間特技効果が1.25倍、射程内の殿と城娘を継続回復し、敵に継続的にダメージを与える射程内の城娘の撃破気が1増加(同種効果の重複無し)'],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 特殊能力からの撃破気
+        const defeatBonus = character.specialAbilities.find(b => b.stat === 'cost_defeat_bonus');
+        expect(defeatBonus).toBeDefined();
+        expect(defeatBonus?.value).toBe(1);
+        expect(defeatBonus?.mode).toBe('flat_sum');
+        expect(defeatBonus?.source).toBe('special_ability');
+        expect(defeatBonus?.target).toBe('range');
+    });
+
     // 他 stat は今後の拡張で追加
 });
 
