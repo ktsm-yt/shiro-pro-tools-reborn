@@ -265,6 +265,21 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
     // 特殊攻撃情報を解析
     const specialAttack = parseSpecialAttackText(rawData.specialAttackTexts ?? []);
 
+    // 特殊攻撃の射程倍率をバフとして追加
+    if (specialAttack?.rangeMultiplier && specialAttack.rangeMultiplier > 1) {
+        const rangePercentBuff = (specialAttack.rangeMultiplier - 1) * 100;
+        specials.push({
+            id: `buff_${buffIdCounter++}`,
+            stat: 'range',
+            mode: 'percent_max',
+            value: rangePercentBuff,
+            target: 'self',
+            source: 'special_ability',
+            isActive: true,
+            note: '特殊攻撃射程',
+        });
+    }
+
     return {
         id: `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: rawData.name,
