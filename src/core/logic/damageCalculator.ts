@@ -487,11 +487,12 @@ function calculateSpecialAttackDamage(
     multiplier: number;
     defenseIgnore: boolean;
     cycleN: number;
+    rangeMultiplier?: number;
 } | undefined {
     const specialAttack = character.specialAttack;
     if (!specialAttack) return undefined;
 
-    const { multiplier, defenseIgnore, cycleN } = specialAttack;
+    const { multiplier, defenseIgnore, cycleN, rangeMultiplier } = specialAttack;
 
     // 特殊攻撃ダメージ = Phase2ダメージ × 特殊攻撃倍率
     // (Phase2時点で give_damage 等の乗算が適用済み)
@@ -527,7 +528,7 @@ function calculateSpecialAttackDamage(
     const damageTaken = environment.damageTaken;
     damage = Math.floor(damage * (1 + damageDealt / 100) * (1 + damageTaken / 100));
 
-    return { damage, multiplier, defenseIgnore, cycleN };
+    return { damage, multiplier, defenseIgnore, cycleN, rangeMultiplier };
 }
 
 // ========================================
@@ -576,7 +577,7 @@ export function calculateDamage(
     let specialAttackBreakdown: DamageBreakdown['specialAttack'] | undefined;
 
     if (specialAttackResult) {
-        const { damage: spDamage, multiplier, defenseIgnore, cycleN } = specialAttackResult;
+        const { damage: spDamage, multiplier, defenseIgnore, cycleN, rangeMultiplier } = specialAttackResult;
 
         // サイクルDPS = ((N-1) * 通常ダメージ + 1 * 特殊攻撃ダメージ) / サイクル時間
         const normalDamage = phase5.damage;
@@ -590,6 +591,7 @@ export function calculateDamage(
             multiplier,
             defenseIgnore,
             cycleN,
+            rangeMultiplier,
             damage: spDamage,
             cycleDps,
         };

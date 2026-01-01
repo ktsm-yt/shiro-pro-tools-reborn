@@ -231,6 +231,11 @@ function PhaseDetail({
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
                         <span>倍率</span><span className="text-right">×{breakdown.specialAttack.multiplier}</span>
                         <span>防御無視</span><span className="text-right">{breakdown.specialAttack.defenseIgnore ? '✓' : '−'}</span>
+                        {breakdown.specialAttack.rangeMultiplier && (
+                            <>
+                                <span>射程倍率</span><span className="text-right">×{breakdown.specialAttack.rangeMultiplier}</span>
+                            </>
+                        )}
                         <span>発動周期</span>
                         <span className="text-right flex items-center justify-end gap-1">
                             {onCycleNChange ? (

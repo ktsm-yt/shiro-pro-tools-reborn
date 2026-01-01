@@ -8,9 +8,9 @@ let buffIdCounter = 0;
 /**
  * 特殊攻撃テキストから倍率と防御無視フラグを抽出する
  * 例: "攻撃の6倍の防御無視ダメージ" → { multiplier: 6, defenseIgnore: true, cycleN: 3 }
- * 例: "攻撃の5倍のダメージ" → { multiplier: 5, defenseIgnore: false, cycleN: 3 }
+ * 例: "1.3倍の射程で" → { rangeMultiplier: 1.3 }
  */
-function parseSpecialAttackText(texts: string[]): { multiplier: number; defenseIgnore: boolean; cycleN: number } | undefined {
+function parseSpecialAttackText(texts: string[]): { multiplier: number; defenseIgnore: boolean; cycleN: number; rangeMultiplier?: number } | undefined {
     if (!texts || texts.length === 0) return undefined;
 
     const combinedText = texts.join(' ');
@@ -31,7 +31,14 @@ function parseSpecialAttackText(texts: string[]): { multiplier: number; defenseI
         cycleN = parseInt(cycleMatch[1], 10);
     }
 
-    return { multiplier, defenseIgnore, cycleN };
+    // 射程倍率 パターン（例: "1.3倍の射程で" or "射程が1.3倍"）
+    let rangeMultiplier: number | undefined;
+    const rangeMatch = combinedText.match(/(\d+(?:\.\d+)?)倍の射程/) || combinedText.match(/射程[がを]?(\d+(?:\.\d+)?)倍/);
+    if (rangeMatch) {
+        rangeMultiplier = parseFloat(rangeMatch[1]);
+    }
+
+    return { multiplier, defenseIgnore, cycleN, rangeMultiplier };
 }
 
 /**
