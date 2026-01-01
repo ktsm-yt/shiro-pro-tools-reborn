@@ -204,6 +204,7 @@ export interface Character {
         multiplier: number;      // 攻撃の何倍か（例: 6 = 攻撃の6倍）
         defenseIgnore: boolean;  // 防御無視
         cycleN: number;          // N回に1回発動（デフォルト: 3）
+        rangeMultiplier?: number; // 射程倍率（例: 1.3 = 1.3倍の射程で）
     };
 }
 
@@ -363,6 +364,7 @@ export interface DamageBreakdown {
         multiplier: number;
         defenseIgnore: boolean;
         cycleN: number;
+        rangeMultiplier?: number; // 射程倍率
         damage: number;          // 特殊攻撃の瞬間ダメージ
         cycleDps: number;        // Nサイクル加重平均DPS
     };
