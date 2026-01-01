@@ -296,6 +296,16 @@ describe('analyzeBuffText', () => {
             expect(result[0].value).toBeCloseTo(30, 5); // 1.3 - 1 = 0.3 = 30%
             expect(result[0].target).toBe('ally'); // 「対象」= ally
         });
+
+        it('should split repeated condition headers (近接/架空) into separate buffs', () => {
+            const text = '全近接城娘の攻撃が120上昇、与ダメージが50%上昇、全架空城の攻撃が120上昇、与ダメージが1.7倍';
+            const result = analyzeBuffText(text);
+
+            const attackFlats = result.filter(b => b.stat === 'attack' && b.mode === 'flat_sum' && b.value === 120);
+            expect(attackFlats).toHaveLength(2);
+            expect(attackFlats.some(b => b.conditionTags?.includes('melee'))).toBe(true);
+            expect(attackFlats.some(b => b.conditionTags?.includes('fictional'))).toBe(true);
+        });
     });
 });
 

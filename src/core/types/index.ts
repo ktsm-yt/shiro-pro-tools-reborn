@@ -96,6 +96,7 @@ export type ConditionTag =
     | 'mountain'
     | 'plain_mountain'
     | 'hell'
+    | 'fictional'
     // 季節属性条件（優先度: MEDIUM）
     | 'summer'
     | 'kenran'
@@ -197,6 +198,13 @@ export interface Character {
         };
     };
     multiHit?: number; // 連撃数
+
+    // 特殊攻撃情報
+    specialAttack?: {
+        multiplier: number;      // 攻撃の何倍か（例: 6 = 攻撃の6倍）
+        defenseIgnore: boolean;  // 防御無視
+        cycleN: number;          // N回に1回発動（デフォルト: 3）
+    };
 }
 
 /**
@@ -321,6 +329,7 @@ export interface DamageBreakdown {
         baseAttack: number;
         percentBuffApplied: number;
         flatBuffApplied: number;
+        flatBuffDetails: Array<{ value: number; condition: string }>;
         additiveBuffApplied: number;
         duplicateBuffApplied: number;
         finalAttack: number;
@@ -350,6 +359,13 @@ export interface DamageBreakdown {
         attacksPerSecond: number;
         dps: number;
     };
+    specialAttack?: {
+        multiplier: number;
+        defenseIgnore: boolean;
+        cycleN: number;
+        damage: number;          // 特殊攻撃の瞬間ダメージ
+        cycleDps: number;        // Nサイクル加重平均DPS
+    };
 }
 
 /**
@@ -367,6 +383,10 @@ export interface DamageCalculationResult {
 
     // DPS
     dps: number;
+
+    // 特殊攻撃（該当キャラのみ）
+    specialAttackDamage?: number;  // 特殊攻撃の瞬間ダメージ
+    cycleDps?: number;             // Nサイクル加重平均DPS
 
     // 鼓舞量（該当キャラのみ）
     inspireAmount?: number;

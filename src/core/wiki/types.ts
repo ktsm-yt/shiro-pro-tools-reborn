@@ -31,6 +31,7 @@ export interface RawCharacterData {
     skillTexts: string[];
     strategyTexts: string[];
     specialTexts?: string[];
+    specialAttackTexts?: string[];
 }
 
 export interface WikiFetchResult {

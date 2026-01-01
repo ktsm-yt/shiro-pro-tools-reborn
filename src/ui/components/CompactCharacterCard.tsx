@@ -1,7 +1,7 @@
 import type { Character, DamageCalculationResult, DamageComparison } from '../../core/types';
 import { getWeaponMeta } from '../constants/meta';
 
-const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : Math.floor(n).toString());
+const fmt = (n: number) => Math.floor(n).toLocaleString();
 const fmtFull = (n: number) => Math.floor(n).toLocaleString();
 
 const DiffArrow = ({ before, after }: { before: number; after: number }) => {

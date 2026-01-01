@@ -193,24 +193,165 @@ function expandParallelStats(line: string): string[] {
     return [line];
 }
 
+// タグ名からConditionTagへのマッピング
+const TAG_TO_CONDITION: Record<string, ConditionTag> = {
+    '絢爛': 'kenran',
+    '夏': 'summer',
+    'ハロウィン': 'halloween',
+    '学園': 'school',
+    '聖夜': 'christmas',
+    '正月': 'new_year',
+    'お月見': 'moon_viewing',
+    '花嫁': 'bride',
+    '水': 'water',
+    '平': 'plain',
+    '山': 'mountain',
+    '平山': 'plain_mountain',
+    '地獄': 'hell',
+};
+
+/**
+ * 条件付きタグバフを抽出
+ * 例: "攻撃40%、［絢爛］城娘は50%上昇" → 50%のkenran条件付きバフ
+ */
+function extractTagConditionalBuffs(line: string, baseBuffs: ParsedBuff[]): ParsedBuff[] {
+    const additionalBuffs: ParsedBuff[] = [];
+
+    // パターン: ［タグ］城娘は○○%上昇 or ［タグ］は○○%
+    const tagPattern = /[［\[]([^\]］]+)[］\]](?:城娘)?(?:は|には)(\d+)[%％]?(?:上昇|増加)?/g;
+    let match;
+
+    while ((match = tagPattern.exec(line)) !== null) {
+        const tagName = match[1];
+        const value = parseInt(match[2]);
+        const conditionTag = TAG_TO_CONDITION[tagName];
+
+        if (!conditionTag) continue;
+
+        // 対応する基本バフを探してクローン
+        for (const baseBuff of baseBuffs) {
+            // 攻撃・防御などのstatに対応するタグ付きバフを生成
+            if (baseBuff.stat === 'attack' || baseBuff.stat === 'defense') {
+                const newBuff: ParsedBuff = {
+                    ...baseBuff,
+                    value,
+                    conditionTags: [conditionTag],
+                    hasCondition: true,
+                    conditionText: match[0],
+                    note: `${tagName}城娘`,
+                };
+                additionalBuffs.push(newBuff);
+                break; // 1つの基本バフに対して1つの条件付きバフ
+            }
+        }
+    }
+
+    return additionalBuffs;
+}
+
+/**
+ * 文ごとの条件タグとターゲットを検出
+ * 「全近接城娘の」→ melee, 「全架空城の」→ fictional
+ */
+interface SentenceContext {
+    conditionTags: ConditionTag[];
+    target: Target | null; // nullの場合はデフォルトのターゲット検出を使う
+    isSelfOnly: boolean;
+}
+
+function splitByRepeatedConditionHeaders(sentence: string): string[] {
+    const headerRegex = /(全?近接(?:城娘)?の|全?遠隔(?:城娘)?の|全?架空(?:城|属性(?:の城娘)?)?の)/g;
+    const matches = Array.from(sentence.matchAll(headerRegex));
+    if (matches.length <= 1) return [sentence];
+
+    const segments: string[] = [];
+    const firstIndex = matches[0]?.index ?? 0;
+    if (firstIndex > 0) {
+        const prefix = sentence.slice(0, firstIndex).trim();
+        if (prefix) segments.push(prefix);
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+        const start = matches[i]?.index ?? 0;
+        const end = i + 1 < matches.length ? (matches[i + 1]?.index ?? sentence.length) : sentence.length;
+        const segment = sentence.slice(start, end).trim();
+        if (segment) segments.push(segment);
+    }
+
+    return segments;
+}
+
+function detectSentenceContext(sentence: string): SentenceContext {
+    const tags: ConditionTag[] = [];
+    let target: Target | null = null;
+    let isSelfOnly = false;
+
+    // 「自身の」で始まる文は自分専用
+    if (/^自身の/.test(sentence.trim())) {
+        isSelfOnly = true;
+        target = 'self';
+    }
+
+    // 「全近接城娘」「近接城娘」
+    if (/全?近接(?:城娘)?の/.test(sentence)) {
+        tags.push('melee');
+        target = 'range'; // 全○○城娘 は射程内対象
+    }
+    // 「全遠隔城娘」「遠隔城娘」
+    if (/全?遠隔(?:城娘)?の/.test(sentence)) {
+        tags.push('ranged');
+        target = 'range';
+    }
+    // 「全架空城」「架空城」「架空属性の城娘」
+    if (/全?架空(?:城|属性(?:の城娘)?)?の/.test(sentence)) {
+        tags.push('fictional');
+        target = 'range';
+    }
+    // 他の属性も追加可能
+
+    return { conditionTags: tags, target, isSelfOnly };
+}
+
 export function parseSkillLine(line: string): ParsedBuff[] {
     // 前処理: 全角→半角、表記揺れ正規化
     const preprocessed = preprocessText(line);
 
-    // 並列表記を展開して各行を処理
-    const expandedLines = expandParallelStats(preprocessed);
+    // 文ごとに分割（。や｡で区切る）
+    const sentences = preprocessed.split(/[。｡]/);
 
     const allResults: ParsedBuff[] = [];
 
-    for (const expandedLine of expandedLines) {
-        const results = parseSkillLineSingle(expandedLine, line);
-        allResults.push(...results);
+    for (const sentence of sentences) {
+        if (!sentence.trim()) continue;
+
+        const segments = splitByRepeatedConditionHeaders(sentence);
+
+        for (const segment of segments) {
+            if (!segment.trim()) continue;
+
+            // この文のコンテキストを検出
+            const sentenceContext = detectSentenceContext(segment);
+
+            // 並列表記を展開して各行を処理
+            const expandedLines = expandParallelStats(segment);
+
+            for (const expandedLine of expandedLines) {
+                const results = parseSkillLineSingle(expandedLine, segment, sentenceContext);
+                allResults.push(...results);
+            }
+        }
     }
+
+    // 条件付きタグバフを追加（「［絢爛］城娘は50%」など）
+    const tagBuffs = extractTagConditionalBuffs(preprocessed, allResults);
+    allResults.push(...tagBuffs);
 
     // 重複除去（展開前の並列パターンで既にマッチしている場合を考慮）
     const unique = new Map<string, ParsedBuff>();
     allResults.forEach(r => {
-        const k = `${r.stat}-${r.target}-${r.value}-${r.mode}-${r.inspireSourceStat ?? ''}`;
+        // conditionTagsも含めてキーを生成
+        const tagKey = r.conditionTags?.join(',') ?? '';
+        const k = `${r.stat}-${r.target}-${r.value}-${r.mode}-${r.inspireSourceStat ?? ''}-${tagKey}`;
         if (!unique.has(k)) {
             unique.set(k, r);
         }
@@ -219,7 +360,7 @@ export function parseSkillLine(line: string): ParsedBuff[] {
     return Array.from(unique.values());
 }
 
-function parseSkillLineSingle(line: string, originalLine: string): ParsedBuff[] {
+function parseSkillLineSingle(line: string, originalLine: string, sentenceContext: SentenceContext = { conditionTags: [], target: null, isSelfOnly: false }): ParsedBuff[] {
     const results: ParsedBuff[] = [];
     const seen = new Set<string>();
     const detectedTarget = detectTarget(line);
@@ -235,8 +376,21 @@ function parseSkillLineSingle(line: string, originalLine: string): ParsedBuff[] 
     const maxStacks = maxStacksMatch ? Number(maxStacksMatch[1]) : undefined;
     const stackableTrigger = /(敵撃破(?:毎|ごと)に|巨大化(?:毎|ごと)に|配置(?:毎|ごと)に)/.test(originalLine);
 
-    const conditionTags = extractConditionTags(originalLine);
+    // 文ごとの条件タグと全体の条件タグをマージ
+    const globalConditionTags = extractConditionTags(originalLine);
+    // 自身専用文はグローバルタグを適用しない。文ごとのタグがあればそれを優先。
+    let conditionTags: ConditionTag[];
+    if (sentenceContext.isSelfOnly) {
+        conditionTags = []; // 自身専用なのでタグなし
+    } else if (sentenceContext.conditionTags.length > 0) {
+        conditionTags = sentenceContext.conditionTags;
+    } else {
+        conditionTags = globalConditionTags;
+    }
     const hasCondition = conditionTags.length > 0;
+
+    // 文コンテキストからターゲットを決定（優先順位: sentenceContext.target > pattern.target > detectedTarget）
+    const sentenceTarget = sentenceContext.target;
 
     patterns.forEach((p: ParsedPattern) => {
         let match: RegExpExecArray | null;
@@ -249,7 +403,28 @@ function parseSkillLineSingle(line: string, originalLine: string): ParsedBuff[] 
             if (seen.has(key)) continue;
             seen.add(key);
 
-            const parsedTarget: Target = p.target ?? detectedTarget.target;
+            // ターゲット決定の優先順位: 文コンテキスト > パターン固有 > 検出結果
+            let parsedTarget: Target = sentenceTarget ?? p.target ?? detectedTarget.target;
+
+            // 「自身の」がバフの直前にある場合は target: self に上書き（文コンテキストより優先）
+            const prefixText = line.slice(Math.max(0, match.index - 15), match.index);
+            if (/自身の/.test(prefixText)) {
+                parsedTarget = 'self';
+            }
+            // 「敵に与えるダメージ」は攻撃者（自身）の能力
+            if (p.stat === 'give_damage' && /敵に与える/.test(line.slice(Math.max(0, match.index - 5), match.index + match[0].length))) {
+                parsedTarget = 'self';
+            }
+            // 「攻撃後の隙」は自身の能力（ただし文コンテキストで明示的にrangeの場合は維持）
+            if (p.stat === 'attack_gap' && !sentenceTarget) {
+                parsedTarget = 'self';
+            }
+            // 「(自分のみ)」「（自分のみが対象）」「(最大2.5倍。自分のみ)」などがテキストにある場合は target: self
+            // ただし、敵関連stat（enemy_*）には適用しない
+            const isEnemyStat = p.stat.startsWith('enemy_');
+            if (!isEnemyStat && (/[（(][^）)]*自分(?:のみ)?(?:が対象)?[^）)]*[）)]/.test(originalLine) || /自分のみ/.test(originalLine))) {
+                parsedTarget = 'self';
+            }
 
             const dynamicInfo = detectDynamicBuff(line, value);
 

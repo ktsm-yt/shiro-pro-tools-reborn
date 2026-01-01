@@ -24,6 +24,7 @@ import type {
     DamageScenario,
 } from '../types';
 import { WEAPON_FRAMES } from '../data/weaponFrames';
+import { areConditionsSatisfied } from '../conditions';
 
 // ========================================
 // ユーティリティ関数
@@ -66,39 +67,85 @@ function calculatePhase1(
     const selfBuffs = character.selfBuffs;
     const envAttackPercent = environment.attackPercent || 0;
 
-    if (!selfBuffs) {
-        return {
-            attack: baseAttack,
-            breakdown: {
-                baseAttack,
-                percentBuffApplied: envAttackPercent,
-                flatBuffApplied: 0,
-                additiveBuffApplied: 0,
-                duplicateBuffApplied: 0,
-                finalAttack: baseAttack * (1 + envAttackPercent / 100),
-            },
-        };
+    // skills/strategies から攻撃バフを抽出
+    const allBuffs = [
+        ...(character.skills || []),
+        ...(character.strategies || []),
+    ];
+
+    // 割合バフ（最大値ルール: target=self または target=range で自身に適用）
+    let selfPercentBuff = 0;
+    let flatBuffApplied = 0;
+    let duplicateBuffSum = 0;
+    const flatBuffDetails: Array<{ value: number; condition: string }> = [];
+
+    // 条件タグのラベル変換
+    const conditionLabels: Record<string, string> = {
+        'melee': '近接',
+        'ranged': '遠隔',
+        'fictional': '架空',
+        'physical': '物理',
+        'magical': '術',
+        'kenran': '絢爛',
+        'summer': '夏',
+        'water': '水',
+        'plain': '平',
+        'mountain': '山',
+        'plain_mountain': '平山',
+    };
+
+    for (const buff of allBuffs) {
+        if (buff.stat !== 'attack' || buff.isActive === false) continue;
+        // 自身に適用されるバフ: target=self または target=range（自身も射程内に含む）
+        const appliesToSelf = buff.target === 'self' || buff.target === 'range';
+        if (!appliesToSelf) continue;
+
+        // 条件タグをチェック（絢爛城娘は50%など）
+        if (buff.conditionTags && buff.conditionTags.length > 0) {
+            if (!areConditionsSatisfied(buff.conditionTags, character)) continue;
+        }
+
+        if (buff.mode === 'percent_max') {
+            if (buff.isDuplicate) {
+                // 効果重複バフは合算
+                duplicateBuffSum += buff.value;
+            } else {
+                // 通常バフは最大値
+                selfPercentBuff = Math.max(selfPercentBuff, buff.value);
+            }
+        } else if (buff.mode === 'flat_sum') {
+            flatBuffApplied += buff.value;
+            // 内訳を記録
+            const condition = buff.conditionTags?.length
+                ? buff.conditionTags.map(t => conditionLabels[t] || t).join('・')
+                : '無条件';
+            flatBuffDetails.push({ value: buff.value, condition });
+        }
     }
 
-    // 割合バフ（最大値ルール適用）
-    const selfPercentBuff = applyMaxValueRule(selfBuffs.percentBuffs || []);
+    // selfBuffs からも取得（後方互換）
+    if (selfBuffs) {
+        const oldPercentBuff = applyMaxValueRule(selfBuffs.percentBuffs || []);
+        selfPercentBuff = Math.max(selfPercentBuff, oldPercentBuff);
+        flatBuffApplied += (selfBuffs.flatBuffs || []).reduce((sum, val) => sum + val, 0);
+        duplicateBuffSum += (selfBuffs.duplicateBuffs || []).reduce((sum, val) => sum + val, 0);
+    }
+
     const percentBuffApplied = selfPercentBuff + envAttackPercent;
 
-    // 固定値バフ（すべて加算）
-    const flatBuffApplied = (selfBuffs.flatBuffs || []).reduce((sum, val) => sum + val, 0);
-
     // 加算バフ（基礎攻撃力を参照）
-    const selfAdditiveBuff = (selfBuffs.additiveBuffs || []).reduce(
-        (sum, buff) => sum + (baseAttack * buff.value) / 100,
-        0
-    );
+    const selfAdditiveBuff = selfBuffs
+        ? (selfBuffs.additiveBuffs || []).reduce(
+              (sum, buff) => sum + (baseAttack * buff.value) / 100,
+              0
+          )
+        : 0;
     const envAdditiveBuff = environment.inspireFlat;
     const additiveBuffApplied = selfAdditiveBuff + envAdditiveBuff;
 
     // 重複バフ（自己と環境を加算）
-    const selfDuplicateBuff = (selfBuffs.duplicateBuffs || []).reduce((sum, val) => sum + val, 0);
     const envDuplicateBuff = environment.duplicateBuff;
-    const duplicateBuffApplied = selfDuplicateBuff + envDuplicateBuff;
+    const duplicateBuffApplied = duplicateBuffSum + envDuplicateBuff;
 
     // Phase 1の計算
     // 特殊な挙動: 加算バフも重複バフで乗算される
@@ -114,6 +161,7 @@ function calculatePhase1(
             baseAttack,
             percentBuffApplied,
             flatBuffApplied,
+            flatBuffDetails,
             additiveBuffApplied: additiveWithDuplicate,
             duplicateBuffApplied,
             finalAttack,
@@ -122,7 +170,8 @@ function calculatePhase1(
 }
 
 // ========================================
-// Phase 2: ダメージ倍率の適用
+// Phase 2: ダメージ倍率の適用（乗算系）
+// give_damage は同種効果として最大値のみ適用（条件別にグループ化）
 // ========================================
 
 function calculatePhase2(
@@ -136,14 +185,64 @@ function calculatePhase2(
     let damage = attack;
     const multipliers: Array<{ type: string; value: number }> = [];
 
+    // selfBuffs.damageMultipliers から抽出
     const selfBuffs = character.selfBuffs;
     if (selfBuffs && selfBuffs.damageMultipliers) {
-        // すべての倍率を個別に乗算
         for (const mult of selfBuffs.damageMultipliers) {
             damage *= mult.value;
             multipliers.push({ type: mult.type, value: mult.value });
         }
     }
+
+    // skills/strategies から give_damage を抽出
+    // 同種効果ルール: 同じソース種別(skill/strategy)内で最大値のみ適用
+    const allBuffs = [
+        ...(character.skills || []),
+        ...(character.strategies || []),
+    ];
+
+    // 条件に該当するgive_damageバフを収集
+    const skillGiveDamageBuffs: Array<{ multiplier: number; conditionKey: string }> = [];
+    const strategyGiveDamageBuffs: Array<{ multiplier: number; conditionKey: string }> = [];
+
+    for (const buff of allBuffs) {
+        if (buff.stat !== 'give_damage' || buff.isActive === false) continue;
+
+        // 自身に適用されるか判定
+        let appliesToSelf = buff.target === 'self';
+
+        // target=range の場合、条件タグに該当すれば自身にも適用
+        if (buff.target === 'range' && buff.conditionTags && buff.conditionTags.length > 0) {
+            if (areConditionsSatisfied(buff.conditionTags, character)) {
+                appliesToSelf = true;
+            }
+        }
+
+        if (!appliesToSelf) continue;
+
+        const multiplier = buff.mode === 'percent_max' ? 1 + buff.value / 100 : buff.value;
+        const conditionKey = buff.conditionTags?.sort().join(',') || 'no_condition';
+
+        // ソース別に分類
+        if (buff.source === 'strategy') {
+            strategyGiveDamageBuffs.push({ multiplier, conditionKey });
+        } else {
+            skillGiveDamageBuffs.push({ multiplier, conditionKey });
+        }
+    }
+
+    // 同種効果ルール: 各ソース内で最大値のみ適用
+    const applyMaxFromBuffs = (buffs: Array<{ multiplier: number; conditionKey: string }>, sourceType: string) => {
+        if (buffs.length === 0) return;
+
+        // 全バフから最大値を取得（同種効果として扱う）
+        const maxMultiplier = Math.max(...buffs.map(b => b.multiplier));
+        damage *= maxMultiplier;
+        multipliers.push({ type: `give_damage`, value: maxMultiplier });
+    };
+
+    applyMaxFromBuffs(skillGiveDamageBuffs, 'skill');
+    applyMaxFromBuffs(strategyGiveDamageBuffs, 'strategy');
 
     if (environment.damageMultiplier && environment.damageMultiplier !== 1) {
         damage *= environment.damageMultiplier;
@@ -205,16 +304,42 @@ function calculatePhase3(
 
 // ========================================
 // Phase 4: 与ダメ・被ダメによる増減
+// damage_dealt は最大値のみ適用（give_damage とは異なる）
 // ========================================
 
 function calculatePhase4(
     damage: number,
+    character: Character,
     environment: EnvironmentSettings
 ): {
     damage: number;
     breakdown: DamageBreakdown['phase4'];
 } {
-    const damageDealt = environment.damageDealt || 0;
+    // skills/strategies から damage_dealt を抽出（最大値ルール）
+    const allBuffs = [
+        ...(character.skills || []),
+        ...(character.strategies || []),
+    ];
+
+    let selfDamageDealt = 0;
+    for (const buff of allBuffs) {
+        if (buff.stat !== 'damage_dealt' || buff.isActive === false) continue;
+
+        // 自身に適用されるか判定
+        let appliesToSelf = buff.target === 'self';
+
+        // target=range の場合、条件タグに該当すれば自身にも適用
+        if (buff.target === 'range' && buff.conditionTags && buff.conditionTags.length > 0) {
+            if (areConditionsSatisfied(buff.conditionTags, character)) {
+                appliesToSelf = true;
+            }
+        }
+
+        if (!appliesToSelf) continue;
+        selfDamageDealt = Math.max(selfDamageDealt, buff.value);
+    }
+
+    const damageDealt = Math.max(selfDamageDealt, environment.damageDealt || 0);
 
     // 被ダメ（最大値のみ適用）
     const damageTaken = environment.damageTaken;
@@ -286,13 +411,41 @@ function calculateDPS(
 
     const selfBuffs = character.selfBuffs;
 
-    // 速度バフを合算（最大値ルール）
+    // skills/strategies から速度・隙バフを抽出
+    const allBuffs = [
+        ...(character.skills || []),
+        ...(character.strategies || []),
+    ];
+
+    let parsedSpeedBuff = 0;
+    let parsedGapReduction = 0;
+
+    for (const buff of allBuffs) {
+        if (buff.isActive === false) continue;
+        const appliesToSelf = buff.target === 'self' || buff.target === 'range';
+        if (!appliesToSelf) continue;
+
+        // 条件タグをチェック
+        if (buff.conditionTags && buff.conditionTags.length > 0) {
+            if (!areConditionsSatisfied(buff.conditionTags, character)) continue;
+        }
+
+        if (buff.stat === 'attack_speed' && buff.mode === 'percent_max') {
+            parsedSpeedBuff = Math.max(parsedSpeedBuff, buff.value);
+        } else if (buff.stat === 'attack_gap' && buff.mode === 'percent_reduction') {
+            parsedGapReduction = Math.max(parsedGapReduction, buff.value);
+        }
+    }
+
+    // 速度バフを合算（最大値ルール: パース済み, selfBuffs, environment）
     const attackSpeedBuff = Math.max(
+        parsedSpeedBuff,
         (selfBuffs && selfBuffs.attackSpeed) || 0,
         environment.attackSpeed || 0
     );
 
     const gapReductionBuff = Math.max(
+        parsedGapReduction,
         (selfBuffs && selfBuffs.gapReduction) || 0,
         environment.gapReduction || 0
     );
@@ -321,12 +474,69 @@ function calculateDPS(
 }
 
 // ========================================
+// 特殊攻撃ダメージ計算
+// ========================================
+
+function calculateSpecialAttackDamage(
+    phase1Attack: number,
+    phase2Damage: number,
+    character: Character,
+    environment: EnvironmentSettings
+): {
+    damage: number;
+    multiplier: number;
+    defenseIgnore: boolean;
+    cycleN: number;
+} | undefined {
+    const specialAttack = character.specialAttack;
+    if (!specialAttack) return undefined;
+
+    const { multiplier, defenseIgnore, cycleN } = specialAttack;
+
+    // 特殊攻撃ダメージ = Phase2ダメージ × 特殊攻撃倍率
+    // (Phase2時点で give_damage 等の乗算が適用済み)
+    let damage = phase2Damage * multiplier;
+
+    // Phase 3: 防御力による減算（防御無視なら0）
+    if (!defenseIgnore) {
+        let effectiveDefense = environment.enemyDefense * (1 - environment.defenseDebuffPercent / 100);
+        effectiveDefense = Math.max(0, effectiveDefense - environment.defenseDebuffFlat);
+        damage = Math.max(1, damage - effectiveDefense);
+    }
+
+    // Phase 4: 与ダメ・被ダメによる増減
+    const allBuffs = [
+        ...(character.skills || []),
+        ...(character.strategies || []),
+    ];
+
+    let selfDamageDealt = 0;
+    for (const buff of allBuffs) {
+        if (buff.stat !== 'damage_dealt' || buff.isActive === false) continue;
+        let appliesToSelf = buff.target === 'self';
+        if (buff.target === 'range' && buff.conditionTags?.length) {
+            if (areConditionsSatisfied(buff.conditionTags, character)) {
+                appliesToSelf = true;
+            }
+        }
+        if (!appliesToSelf) continue;
+        selfDamageDealt = Math.max(selfDamageDealt, buff.value);
+    }
+
+    const damageDealt = Math.max(selfDamageDealt, environment.damageDealt || 0);
+    const damageTaken = environment.damageTaken;
+    damage = Math.floor(damage * (1 + damageDealt / 100) * (1 + damageTaken / 100));
+
+    return { damage, multiplier, defenseIgnore, cycleN };
+}
+
+// ========================================
 // メイン計算関数
 // ========================================
 
 /**
  * ダメージを計算
- * 
+ *
  * @param character キャラクター
  * @param environment 環境設定
  * @returns ダメージ計算結果
@@ -345,13 +555,45 @@ export function calculateDamage(
     const phase3 = calculatePhase3(phase2.damage, character, environment);
 
     // Phase 4: 与ダメ・被ダメによる増減
-    const phase4 = calculatePhase4(phase3.damage, environment);
+    const phase4 = calculatePhase4(phase3.damage, character, environment);
 
     // Phase 5: 連撃による乗算
     const phase5 = calculatePhase5(phase4.damage, character);
 
     // DPS計算
     const dpsCalc = calculateDPS(phase5.damage, character, environment);
+
+    // 特殊攻撃ダメージ計算
+    const specialAttackResult = calculateSpecialAttackDamage(
+        phase1.attack,
+        phase2.damage,
+        character,
+        environment
+    );
+
+    // サイクルDPS計算（特殊攻撃がある場合）
+    let cycleDps: number | undefined;
+    let specialAttackBreakdown: DamageBreakdown['specialAttack'] | undefined;
+
+    if (specialAttackResult) {
+        const { damage: spDamage, multiplier, defenseIgnore, cycleN } = specialAttackResult;
+
+        // サイクルDPS = ((N-1) * 通常ダメージ + 1 * 特殊攻撃ダメージ) / サイクル時間
+        const normalDamage = phase5.damage;
+        const totalCycleDamage = (cycleN - 1) * normalDamage + spDamage;
+
+        // サイクル時間 = N回分の攻撃時間
+        const cycleTime = dpsCalc.breakdown.totalFrames * cycleN;
+        cycleDps = totalCycleDamage / (cycleTime / 60); // 60FPS
+
+        specialAttackBreakdown = {
+            multiplier,
+            defenseIgnore,
+            cycleN,
+            damage: spDamage,
+            cycleDps,
+        };
+    }
 
     // 鼓舞量計算（該当キャラのみ）
     let inspireAmount: number | undefined;
@@ -368,6 +610,8 @@ export function calculateDamage(
         phase4Damage: phase4.damage,
         totalDamage: phase5.damage,
         dps: dpsCalc.dps,
+        specialAttackDamage: specialAttackResult?.damage,
+        cycleDps,
         inspireAmount,
         breakdown: {
             phase1: phase1.breakdown,
@@ -376,6 +620,7 @@ export function calculateDamage(
             phase4: phase4.breakdown,
             phase5: phase5.breakdown,
             dps: dpsCalc.breakdown,
+            specialAttack: specialAttackBreakdown,
         },
     };
 }

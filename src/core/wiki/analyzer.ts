@@ -6,6 +6,35 @@ import { convertToRebornBuff } from '../parser/converter';
 let buffIdCounter = 0;
 
 /**
+ * 特殊攻撃テキストから倍率と防御無視フラグを抽出する
+ * 例: "攻撃の6倍の防御無視ダメージ" → { multiplier: 6, defenseIgnore: true, cycleN: 3 }
+ * 例: "攻撃の5倍のダメージ" → { multiplier: 5, defenseIgnore: false, cycleN: 3 }
+ */
+function parseSpecialAttackText(texts: string[]): { multiplier: number; defenseIgnore: boolean; cycleN: number } | undefined {
+    if (!texts || texts.length === 0) return undefined;
+
+    const combinedText = texts.join(' ');
+
+    // 攻撃の○倍 パターン
+    const multiplierMatch = combinedText.match(/攻撃(?:力)?の?(\d+(?:\.\d+)?)倍/);
+    if (!multiplierMatch) return undefined;
+
+    const multiplier = parseFloat(multiplierMatch[1]);
+
+    // 防御無視 判定
+    const defenseIgnore = /防御[を]?無視/.test(combinedText);
+
+    // N回に1回 パターン（デフォルト: 3）
+    let cycleN = 3;
+    const cycleMatch = combinedText.match(/(\d+)回(?:に|ごとに)1回/);
+    if (cycleMatch) {
+        cycleN = parseInt(cycleMatch[1], 10);
+    }
+
+    return { multiplier, defenseIgnore, cycleN };
+}
+
+/**
  * 計略テキストの最後の()から対象を抽出する
  * 例: "30秒間対象の射程が1.3倍（自分のみが対象）" → 'self'
  * 例: "対象の攻撃20%上昇（射程内の城娘が対象）" → 'range'
@@ -149,7 +178,8 @@ export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isA
     // 重複除去
     const uniq = new Map<string, Omit<Buff, 'id' | 'source' | 'isActive'>>();
     allBuffs.forEach(buff => {
-        const key = `${buff.stat}-${buff.mode}-${buff.value}-${buff.target}-${buff.costType ?? ''}-${buff.inspireSourceStat ?? ''}`;
+        const tagKey = buff.conditionTags?.join(',') ?? '';
+        const key = `${buff.stat}-${buff.mode}-${buff.value}-${buff.target}-${buff.costType ?? ''}-${buff.inspireSourceStat ?? ''}-${tagKey}`;
         if (!uniq.has(key)) uniq.set(key, buff);
     });
 
@@ -225,6 +255,9 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
         }
     }
 
+    // 特殊攻撃情報を解析
+    const specialAttack = parseSpecialAttackText(rawData.specialAttackTexts ?? []);
+
     return {
         id: `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: rawData.name,
@@ -260,6 +293,7 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
         skills,
         strategies,
         specialAbilities: specials,
+        specialAttack,
         rawSkillTexts: rawData.skillTexts,
         rawStrategyTexts: rawData.strategyTexts,
         rawSpecialTexts: rawData.specialTexts,
