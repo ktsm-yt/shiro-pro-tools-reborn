@@ -16,7 +16,7 @@ interface DamageCalculatorProps {
   formation?: Formation;
 }
 
-const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : Math.floor(n).toString());
+const fmt = (n: number) => Math.floor(n).toLocaleString();
 const fmtFull = (n: number) => Math.floor(n).toLocaleString();
 
 const DetailModal = ({

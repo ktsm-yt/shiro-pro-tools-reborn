@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Character, DamageCalculationResult, EnvironmentSettings, DamageBreakdown, Buff, DamageRange } from '../../core/types';
 import { calculateDamage, calculateDamageRange } from '../../core/logic/damageCalculator';
 
@@ -6,9 +6,10 @@ interface DamageDetailModalProps {
     character: Character;
     baseEnv: EnvironmentSettings;
     onClose: () => void;
+    onUpdateCharacter?: (updated: Character) => void;
 }
 
-const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : Math.floor(n).toLocaleString());
+const fmt = (n: number) => Math.floor(n).toLocaleString();
 
 /** バフからダメージ倍率情報を抽出 */
 interface MultiplierInfo {
@@ -81,10 +82,14 @@ function extractMultipliers(character: Character): MultiplierInfo[] {
     processBuffs(character.strategies || [], 'strategy');
 
     // rawテキストからも抽出（バフで拾えなかった倍率用）
+    // 同じ値の倍率が既にパース済みバフから抽出されている場合はスキップ
     if (character.rawSkillTexts?.length) {
         const fromText = extractMultipliersFromText(character.rawSkillTexts, 'skill');
         for (const m of fromText) {
-            if (!multipliers.some(existing => Math.abs(existing.value - m.value) < 0.01)) {
+            // 同じ値・同じソースの倍率が既にあればスキップ
+            if (!multipliers.some(existing =>
+                Math.abs(existing.value - m.value) < 0.01 && existing.source === m.source
+            )) {
                 multipliers.push(m);
             }
         }
@@ -92,7 +97,10 @@ function extractMultipliers(character: Character): MultiplierInfo[] {
     if (character.rawStrategyTexts?.length) {
         const fromText = extractMultipliersFromText(character.rawStrategyTexts, 'strategy');
         for (const m of fromText) {
-            if (!multipliers.some(existing => Math.abs(existing.value - m.value) < 0.01)) {
+            // 同じ値・同じソースの倍率が既にあればスキップ
+            if (!multipliers.some(existing =>
+                Math.abs(existing.value - m.value) < 0.01 && existing.source === m.source
+            )) {
                 multipliers.push(m);
             }
         }
@@ -120,7 +128,13 @@ function formatConditionTags(tags: string[]): string {
     return tags.map(t => tagLabels[t] || t).join('・');
 }
 
-function PhaseDetail({ breakdown }: { breakdown: DamageBreakdown }) {
+function PhaseDetail({
+    breakdown,
+    onCycleNChange,
+}: {
+    breakdown: DamageBreakdown;
+    onCycleNChange?: (value: number) => void;
+}) {
     return (
         <div className="bg-gray-800/30 text-xs space-y-3 p-4 rounded-xl border border-gray-700">
             {/* Phase 1 */}
@@ -130,6 +144,16 @@ function PhaseDetail({ breakdown }: { breakdown: DamageBreakdown }) {
                     <span>基礎攻撃</span><span className="text-right">{fmt(breakdown.phase1.baseAttack)}</span>
                     <span>割合バフ</span><span className="text-right">+{breakdown.phase1.percentBuffApplied.toFixed(1)}%</span>
                     <span>固定値バフ</span><span className="text-right">+{fmt(breakdown.phase1.flatBuffApplied)}</span>
+                    {breakdown.phase1.flatBuffDetails && breakdown.phase1.flatBuffDetails.length > 0 && (
+                        <div className="col-span-2 pl-4 text-xs text-gray-400">
+                            {breakdown.phase1.flatBuffDetails.map((d, i) => (
+                                <div key={i} className="flex justify-between">
+                                    <span>└ {d.condition}</span>
+                                    <span>+{d.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <span>加算バフ</span><span className="text-right">+{fmt(breakdown.phase1.additiveBuffApplied)}</span>
                     <span>効果重複</span><span className="text-right">+{breakdown.phase1.duplicateBuffApplied.toFixed(1)}%</span>
                     <span className="font-bold text-white">最終攻撃</span><span className="text-right font-bold text-white">{fmt(breakdown.phase1.finalAttack)}</span>
@@ -199,23 +223,99 @@ function PhaseDetail({ breakdown }: { breakdown: DamageBreakdown }) {
                     <span className="font-bold text-white">DPS</span><span className="text-right font-bold text-yellow-400">{fmt(breakdown.dps.dps)}</span>
                 </div>
             </div>
+
+            {/* 特殊攻撃 */}
+            {breakdown.specialAttack && (
+                <div>
+                    <div className="text-cyan-400 font-medium mb-1">特殊攻撃</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
+                        <span>倍率</span><span className="text-right">×{breakdown.specialAttack.multiplier}</span>
+                        <span>防御無視</span><span className="text-right">{breakdown.specialAttack.defenseIgnore ? '✓' : '−'}</span>
+                        <span>発動周期</span>
+                        <span className="text-right flex items-center justify-end gap-1">
+                            {onCycleNChange ? (
+                                <>
+                                    <button
+                                        onClick={() => onCycleNChange(breakdown.specialAttack!.cycleN - 1)}
+                                        className="w-5 h-5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                                        disabled={breakdown.specialAttack.cycleN <= 1}
+                                    >−</button>
+                                    <span className="w-4 text-center">{breakdown.specialAttack.cycleN}</span>
+                                    <button
+                                        onClick={() => onCycleNChange(breakdown.specialAttack!.cycleN + 1)}
+                                        className="w-5 h-5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                                        disabled={breakdown.specialAttack.cycleN >= 10}
+                                    >+</button>
+                                    <span className="text-gray-500 ml-1">回に1回</span>
+                                </>
+                            ) : (
+                                <>{breakdown.specialAttack.cycleN}回に1回</>
+                            )}
+                        </span>
+                        <span className="font-bold text-white">瞬間ダメージ</span>
+                        <span className="text-right font-bold text-cyan-400">{fmt(breakdown.specialAttack.damage)}</span>
+                        <span className="font-bold text-white">サイクルDPS</span>
+                        <span className="text-right font-bold text-cyan-400">{fmt(breakdown.specialAttack.cycleDps)}</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailModalProps) {
+export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharacter }: DamageDetailModalProps) {
+    // cycleN のローカル編集状態
+    const [localCycleN, setLocalCycleN] = useState<number | undefined>(character.specialAttack?.cycleN);
+
+    // ESCキーでモーダルを閉じる
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
+
+    // cycleN をオーバーライドしたキャラクターを生成
+    const effectiveCharacter = useMemo(() => {
+        if (!character.specialAttack || localCycleN === undefined) return character;
+        return {
+            ...character,
+            specialAttack: {
+                ...character.specialAttack,
+                cycleN: localCycleN,
+            },
+        };
+    }, [character, localCycleN]);
+
     // 計算結果
     const result: DamageCalculationResult = useMemo(() => {
-        return calculateDamage(character, baseEnv);
-    }, [character, baseEnv]);
+        return calculateDamage(effectiveCharacter, baseEnv);
+    }, [effectiveCharacter, baseEnv]);
 
     // ダメージレンジ計算
     const damageRange: DamageRange = useMemo(() => {
-        return calculateDamageRange(character, baseEnv);
-    }, [character, baseEnv]);
+        return calculateDamageRange(effectiveCharacter, baseEnv);
+    }, [effectiveCharacter, baseEnv]);
 
     // ダメージ倍率と条件を抽出
     const multipliers = useMemo(() => extractMultipliers(character), [character]);
+
+    // cycleN 変更ハンドラ
+    const handleCycleNChange = (newValue: number) => {
+        const clampedValue = Math.max(1, Math.min(10, newValue));
+        setLocalCycleN(clampedValue);
+        // 永続化
+        if (onUpdateCharacter && character.specialAttack) {
+            onUpdateCharacter({
+                ...character,
+                specialAttack: {
+                    ...character.specialAttack,
+                    cycleN: clampedValue,
+                },
+            });
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -279,6 +379,19 @@ export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailM
                                 <div className="text-2xl font-bold text-yellow-400">{fmt(result.dps)}</div>
                             </div>
                         </div>
+                        {/* 特殊攻撃サマリー */}
+                        {result.specialAttackDamage && result.cycleDps && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-1">特殊攻撃</div>
+                                    <div className="text-xl font-bold text-cyan-400">{fmt(result.specialAttackDamage)}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs text-gray-400 mb-1">サイクルDPS</div>
+                                    <div className="text-xl font-bold text-cyan-400">{fmt(result.cycleDps)}</div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* ダメージ変動（シナリオ別DPS） */}
@@ -349,7 +462,7 @@ export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailM
                         <div className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-medium">
                             Phase詳細
                         </div>
-                        <PhaseDetail breakdown={result.breakdown} />
+                        <PhaseDetail breakdown={result.breakdown} onCycleNChange={character.specialAttack ? handleCycleNChange : undefined} />
                     </div>
                 </div>
             </div>

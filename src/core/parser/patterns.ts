@@ -57,12 +57,18 @@ export const patterns: ParsedPattern[] = [
     { stat: 'enemy_defense_ignore_percent', mode: 'percent_max', regex: new RegExp(`防御[を]?\\s*(\\d+)${PCT}無視`) },
 
     // 3. ダメージ系
+    // Phase 2: give_damage（乗算）- 「与えるダメージ」「○倍のダメージを与える」「攻撃の○倍のダメージ」
+    { stat: 'give_damage', mode: 'percent_max', regex: /特殊攻撃のダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: '特殊攻撃' },
     { stat: 'give_damage', mode: 'percent_max', regex: /(\d+(?:\.\d+)?)倍のダメージを与える/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: /攻撃の?(\d+(?:\.\d+)?)倍のダメージ/, valueTransform: asPercentFromMultiplier, unit: '×' },
-    // 「与ダメージ2.5倍」「与えるダメージ1.3倍」などの倍率パターン
-    { stat: 'damage_dealt', mode: 'percent_max', regex: /与(?:える)?ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
-    { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)`) },
-    { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`^与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}`) },
+    // 「与えるダメージ」は give_damage（Phase 2）- 「与ダメ」より先にマッチさせる
+    { stat: 'give_damage', mode: 'percent_max', regex: /与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
+    // HP依存ダメージ: 「敵の耐久が低い程与えるダメージ上昇(最大○倍)」
+    { stat: 'give_damage', mode: 'percent_max', regex: /敵の耐久が低い(?:程|ほど).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: 'HP依存（最大値）' },
+    // Phase 4: damage_dealt（加算）- 「与ダメ」（略称）
+    { stat: 'damage_dealt', mode: 'percent_max', regex: /(?<!与)与ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`(?<!与)与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)`) },
     { stat: 'enemy_damage_taken', mode: 'percent_max', regex: new RegExp(`被ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:増加|上昇|アップ)`) },  // 敵の被ダメ上昇（攻撃貢献）
     { stat: 'enemy_damage_taken', mode: 'percent_max', regex: /被ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, unit: '×', valueTransform: asPercentFromMultiplier },  // 敵の被ダメ倍（1.5倍→50%）
     { stat: 'damage_taken', mode: 'percent_max', regex: new RegExp(`被ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:軽減|低下|減少)`) },  // 自分の被ダメ軽減（防御）
@@ -112,11 +118,12 @@ export const patterns: ParsedPattern[] = [
     // 気軽減%（巨大化気のみ対象）
     { stat: 'cost_giant', mode: 'percent_reduction', regex: new RegExp(`巨大化.*?気(?:が)?\\s*(\\d+)${PCT}(?:減少|軽減)`) },
     { stat: 'cost_giant', mode: 'percent_reduction', regex: /巨大化.*?気.*?半減/, valueTransform: () => 50 },
-    // 気軽減-（固定値: 消費気・巨大化気 両方対象）
-    { stat: 'cost_giant', mode: 'flat_sum', regex: /消費気(?:が)?\s*(\d+)(?:減少|軽減)(?![%％])/ },
+    // 気軽減-（固定値: 消費気・巨大化気 両方対象、ただし計略消費気は除外）
+    // 「計略消費気」「計略の消費気」両方を除外するため、直前が「計略」または「の」でないことを確認
+    { stat: 'cost_giant', mode: 'flat_sum', regex: /(?<!計略)(?<!の)消費気(?:が)?\s*(\d+)(?:減少|軽減)(?![%％])/ },
     { stat: 'cost_giant', mode: 'flat_sum', regex: /巨大化.*?気(?:が)?\s*(\d+)(?:減少|軽減)(?![%％])/ },
     // 計略消費気
-    { stat: 'cost_strategy', mode: 'flat_sum', regex: /計略.*?消費気.*?(\d+)減少/ },
+    { stat: 'cost_strategy', mode: 'flat_sum', regex: /計略(?:の)?消費気(?:が)?\s*(\d+)(?:減少|軽減)/ },
     // 計略短縮
     { stat: 'strategy_cooldown', mode: 'percent_reduction', regex: new RegExp(`計略.*?再使用.*?(\\d+)${PCT}短縮`) },
     { stat: 'strategy_cooldown', mode: 'percent_reduction', regex: new RegExp(`再使用までの時間.*?(\\d+)${PCT}短縮`) },

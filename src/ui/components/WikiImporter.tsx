@@ -20,6 +20,7 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     const [error, setError] = useState<string | null>(null);
     const [previewCharacter, setPreviewCharacter] = useState<Character | null>(null);
     const [showDebug, setShowDebug] = useState(false);
+    const manualAttributeOptions = ['平', '山', '水', '平山', '地獄', '架空', '無属性'];
 
     const handleClose = () => {
         setUrlInput('');
@@ -47,6 +48,19 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
             const list = cloned[kind] || [];
             cloned[kind] = list.map(b => b.id === id ? { ...b, isActive: !b.isActive } : b) as any;
             return cloned;
+        });
+    };
+
+    const toggleAttribute = (attr: string) => {
+        setPreviewCharacter(prev => {
+            if (!prev) return prev;
+            const current = new Set(prev.attributes ?? []);
+            if (current.has(attr)) {
+                current.delete(attr);
+            } else {
+                current.add(attr);
+            }
+            return { ...prev, attributes: Array.from(current) };
         });
     };
 
@@ -224,6 +238,31 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                         <div>
                                             <span className="text-sm text-gray-400">属性:</span>{' '}
                                             {previewCharacter.attributes.join(', ')}
+                                        </div>
+                                        <div>
+                                            <details className="mt-1 text-xs">
+                                                <summary className="cursor-pointer text-gray-400 hover:text-gray-200">
+                                                    属性補正（手動）
+                                                </summary>
+                                                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                                    {manualAttributeOptions.map(attr => {
+                                                        const checked = previewCharacter.attributes.includes(attr);
+                                                        return (
+                                                            <label key={attr} className="inline-flex items-center gap-1 text-gray-200">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={checked}
+                                                                    onChange={() => toggleAttribute(attr)}
+                                                                />
+                                                                {attr}
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <p className="text-[11px] text-gray-500 mt-1">
+                                                    Wikiから取得できない属性はここで追加してください
+                                                </p>
+                                            </details>
                                         </div>
                                         <div>
                                             <span className="text-sm text-gray-400">ステータス:</span>

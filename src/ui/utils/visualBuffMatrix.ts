@@ -184,7 +184,7 @@ export function buildVisualBuffMatrix(
           cell.maxValue = cell.selfStackValue + cell.strategyStackValue;
         } else if (isFlat) {
           // 固定値バフ
-          cell.maxFlat = Math.max(cell.maxFlat, effectiveValue);
+          cell.maxFlat += effectiveValue;
           if (type === 'self') cell.hasSelfFlat = true;
           else if (type === 'ally') cell.hasAllyFlat = true;
           else if (type === 'strategy') cell.hasStrategyFlat = true;
@@ -239,8 +239,8 @@ export function buildVisualBuffMatrix(
       let sharedMax = 0;          // 味方にも適用される通常バフ
       let selfOnlyMax = 0;        // 自分だけの通常バフ
       let duplicateSum = 0;       // 効果重複バフ（合算）
-      let sharedFlatMax = 0;
-      let selfOnlyFlatMax = 0;
+      let sharedFlatSum = 0;
+      let selfOnlyFlatSum = 0;
       let duplicateFlatSum = 0;
 
       cell.sources.forEach((src) => {
@@ -251,9 +251,9 @@ export function buildVisualBuffMatrix(
           if (isDup) {
             duplicateFlatSum += src.value;  // 効果重複は合算
           } else if (isSelfOnly) {
-            selfOnlyFlatMax = Math.max(selfOnlyFlatMax, src.value);
+            selfOnlyFlatSum += src.value;
           } else {
-            sharedFlatMax = Math.max(sharedFlatMax, src.value);
+            sharedFlatSum += src.value;
           }
         } else {
           if (isDup) {
@@ -275,9 +275,10 @@ export function buildVisualBuffMatrix(
       cell.selfExtra = Math.max(0, selfOnlyMax - sharedMax);
 
       // 固定値の3色計算
-      cell.sharedFlat = sharedFlatMax;
+      cell.sharedFlat = sharedFlatSum;
       cell.duplicateFlat = duplicateFlatSum;
-      cell.selfExtraFlat = Math.max(0, selfOnlyFlatMax - sharedFlatMax);
+      cell.selfExtraFlat = selfOnlyFlatSum;
+      cell.maxFlat = sharedFlatSum + duplicateFlatSum + selfOnlyFlatSum;
     });
   });
 

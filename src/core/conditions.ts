@@ -49,6 +49,7 @@ export const CONDITION_PRIORITY: Record<ConditionTag, number> = {
     mountain: 6,
     plain_mountain: 6,
     hell: 6,
+    fictional: 6,
     summer: 6,
     kenran: 6,
     halloween: 6,
@@ -118,6 +119,7 @@ export const CONDITION_DETECTION_PATTERNS: ConditionDetectionPattern[] = [
     { pattern: /山(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['mountain'], priority: 80, exclusive: false, category: 'attribute' },
     { pattern: /平山(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['plain_mountain'], priority: 85, exclusive: false, category: 'attribute' },
     { pattern: /地獄(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['hell'], priority: 80, exclusive: false, category: 'attribute' },
+    { pattern: /架空(?:城)?(?:のみ|限定)?/i, tags: ['fictional'], priority: 80, exclusive: false, category: 'attribute' },
 
     // 季節属性
     { pattern: /夏(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['summer'], priority: 80, exclusive: false, category: 'season' },
@@ -292,6 +294,8 @@ export function checkCondition(tag: ConditionTag, character: Character, context?
             return matchAttribute(character, '平山');
         case 'hell':
             return matchAttribute(character, '地獄');
+        case 'fictional':
+            return matchAttribute(character, '架空');
 
         case 'summer':
             return matchSeason(character, '夏');
