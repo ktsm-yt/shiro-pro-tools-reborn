@@ -25,7 +25,8 @@ export const targetMap: Record<string, Target> = {
     射程外: 'out_of_range',
 };
 
-const asPercentFromMultiplier = (m: RegExpExecArray) => (parseFloat(m[1]) - 1) * 100;
+// 浮動小数点誤差を丸める（1.4倍→40%、2.5倍→150%など）
+const asPercentFromMultiplier = (m: RegExpExecArray) => Math.round((parseFloat(m[1]) - 1) * 100 * 100) / 100;
 
 // 半角・全角両対応のパーセント記号
 const PCT = '[%％]';
@@ -37,9 +38,14 @@ export const patterns: ParsedPattern[] = [
     { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'defense' },
 
     // 1. 攻撃系
+    // 時間経過・条件付き攻撃上昇（上限値）: 「攻撃が徐々に上昇(上限○%)」「大破数に応じて攻撃が上昇(上限○倍)」
+    // 注: 「攻撃が○倍のダメージを与え」は give_damage パターンで先にマッチされる
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が)?.*?上昇.*?[（(]上限\\s*(\\d+)${PCT}[）)]`), note: '時間/条件依存（最大値）' },
+    { stat: 'attack', mode: 'percent_max', regex: /攻撃(?:力)?(?:が)?.*?上昇.*?[（(]上限\s*(\d+(?:\.\d+)?)倍[）)]/, valueTransform: asPercentFromMultiplier, unit: '×', note: '時間/条件依存（最大値）' },
     // 「攻撃と防御1.2倍」「攻撃が1.2倍」のような複合パターン（展開後に「が」が入る）
     // 注: 鼓舞パターン「自身の攻撃と防御の○%...加算」と重複しないよう、(?<!自身の)で除外
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:が|を)?(?:と[^0-9]+)?(\\d+(?:\\.\\d+)?)倍`), unit: '×', valueTransform: asPercentFromMultiplier },
+    // 注: 「攻撃が○倍のダメージを与え」は give_damage なので (?!のダメージ) で除外
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:が|を)?(?:と[^0-9]+)?(\\d+(?:\\.\\d+)?)倍(?!のダメージ)`), unit: '×', valueTransform: asPercentFromMultiplier },
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
     { stat: 'attack', mode: 'flat_sum', regex: /攻撃(?:力)?(?:が|を|\+)\s*(\d+)(?![0-9]*[%％.倍])(?:上昇|増加|アップ)?/ },  // が|を|+ 必須、小数点・倍も除外
@@ -57,17 +63,18 @@ export const patterns: ParsedPattern[] = [
     { stat: 'enemy_defense_ignore_percent', mode: 'percent_max', regex: new RegExp(`防御[を]?\\s*(\\d+)${PCT}無視`) },
 
     // 3. ダメージ系
-    // Phase 2: give_damage（乗算）- 「与えるダメージ」「○倍のダメージを与える」「攻撃の○倍のダメージ」
+    // Phase 2: give_damage（乗算）- 「与えるダメージ」のみ
+    // 注: 「攻撃の○倍のダメージを与え」「○倍のダメージを与える」は瞬間ダメージ（特殊攻撃・計略）であり、
+    //     give_damageバフではないので除外する
     // 特殊攻撃の与えるダメージ: 「自身の特殊攻撃で与えるダメージが○倍」「特殊攻撃のダメージが○倍」
     { stat: 'give_damage', mode: 'percent_max', regex: /特殊攻撃(?:で|の)(?:与える)?ダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: '特殊攻撃' },
-    { stat: 'give_damage', mode: 'percent_max', regex: /(\d+(?:\.\d+)?)倍のダメージを与える/, valueTransform: asPercentFromMultiplier, unit: '×' },
-    { stat: 'give_damage', mode: 'percent_max', regex: /攻撃の?(\d+(?:\.\d+)?)倍のダメージ/, valueTransform: asPercentFromMultiplier, unit: '×' },
     // 射程条件付き与えるダメージ: 「射程が○以上の場合与えるダメージが○倍」
     // 注: このパターンは analyzer.ts で閾値を抽出し、conditionalGiveDamage として処理される
     { stat: 'give_damage', mode: 'percent_max', regex: /射程[がを]?\d+以上の?場合.*?与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: '射程条件' },
     // 「与えるダメージ」は give_damage（Phase 2）- 「与ダメ」より先にマッチさせる
-    { stat: 'give_damage', mode: 'percent_max', regex: /与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
-    { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
+    // 注: 「攻撃の○倍のダメージ」は除外するために、直前に「与える」か「与」が必須、または「攻撃の」を否定する
+    { stat: 'give_damage', mode: 'percent_max', regex: /(?<!攻撃の)与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`(?<!攻撃の)与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
     // HP依存ダメージ: 「敵の耐久が低い程与えるダメージ上昇(最大○倍)」
     { stat: 'give_damage', mode: 'percent_max', regex: /敵の耐久が低い(?:程|ほど).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: 'HP依存（最大値）' },
     // Phase 4: damage_dealt（加算）- 「与ダメ」（略称）

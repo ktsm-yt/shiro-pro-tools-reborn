@@ -216,8 +216,8 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
             // 武器種
             // ヘッダー・値の両方をチェックする（ヘッダーなしのテーブル対応）
-            const weaponPattern = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札)$/;
-            const weaponPatternLoose = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札)/;
+            const weaponPattern = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札|その他)$/;
+            const weaponPatternLoose = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札|その他)/;
             // 表記揺れの正規化マップ
             const weaponNormalize: Record<string, string> = {
                 '札': '法術',
@@ -372,7 +372,8 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
             const isSkillOrStrategy =
                 !isSpecialAttack && (
                     header.includes('[無印]') || header.includes('[改壱]') || header.includes('[改弐]') ||
-                    header.includes('特技') || header.includes('計略') || header.includes('特殊能力') || currentSection === 'special'
+                    header.includes('特技') || header.includes('計略') || header.includes('特殊能力') ||
+                    currentSection === 'special' || currentSection === 'skill' || currentSection === 'strategy'
                 );
 
             if (isSkillOrStrategy) {

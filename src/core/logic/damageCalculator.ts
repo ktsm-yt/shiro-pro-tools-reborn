@@ -66,9 +66,10 @@ function getDynamicBuffMultiplier(
 
     // 伏兵数に依存するバフ
     if (buff.dynamicType === 'per_ambush_deployed' && character?.ambushInfo) {
+        const maxCount = character.ambushInfo.maxCount;
         const ambushCount = (environment.currentAmbushCount && environment.currentAmbushCount > 0)
-            ? environment.currentAmbushCount
-            : character.ambushInfo.maxCount;
+            ? Math.min(environment.currentAmbushCount, maxCount)  // キャラクターの最大数で制限
+            : maxCount;
         return ambushCount > 0 ? ambushCount : 1;
     }
 
@@ -168,9 +169,12 @@ function calculatePhase1(
 
     for (const buff of allBuffs) {
         if (buff.stat !== 'attack' || buff.isActive === false) continue;
-        // 自身に適用されるバフ: target=self または target=range（自身も射程内に含む）
-        const appliesToSelf = buff.target === 'self' || buff.target === 'range';
+        // 自身に適用されるバフ: target=self または target=range/all（自身も射程内に含む）
+        const appliesToSelf = buff.target === 'self' || buff.target === 'range' || buff.target === 'all';
         if (!appliesToSelf) continue;
+
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
 
         // 条件タグをチェック（絢爛城娘は50%など）
         if (buff.conditionTags && buff.conditionTags.length > 0) {
@@ -218,7 +222,8 @@ function calculatePhase1(
         duplicateBuffSum += (selfBuffs.duplicateBuffs || []).reduce((sum, val) => sum + val, 0);
     }
 
-    const percentBuffApplied = selfPercentBuff + envAttackPercent;
+    // 環境設定の攻撃%も最大値ルールで適用（割合バフは最高値のみ）
+    const percentBuffApplied = Math.max(selfPercentBuff, envAttackPercent);
 
     // 加算バフ（基礎攻撃力を参照）
     const selfAdditiveBuff = selfBuffs
@@ -247,9 +252,10 @@ function calculatePhase1(
     // 0または未設定の場合はキャラクターの最大数を使用
     let ambushAttackMultiplier = 1;
     if (character.ambushInfo?.attackMultiplier) {
+        const maxCount = character.ambushInfo.maxCount;
         const ambushCount = (environment.currentAmbushCount && environment.currentAmbushCount > 0)
-            ? environment.currentAmbushCount
-            : character.ambushInfo.maxCount;
+            ? Math.min(environment.currentAmbushCount, maxCount)  // キャラクターの最大数で制限
+            : maxCount;
         if (ambushCount > 0) {
             if (character.ambushInfo.isMultiplicative) {
                 // 累乗計算: 1.4^2 = 1.96
@@ -304,8 +310,11 @@ function calculateCurrentRange(character: Character): number {
 
     for (const buff of allBuffs) {
         if (buff.stat !== 'range' || buff.isActive === false) continue;
-        const appliesToSelf = buff.target === 'self' || buff.target === 'range';
+        const appliesToSelf = buff.target === 'self' || buff.target === 'range' || buff.target === 'all';
         if (!appliesToSelf) continue;
+
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
 
         if (buff.mode === 'percent_max') {
             rangePercentBuff = Math.max(rangePercentBuff, buff.value);
@@ -372,8 +381,11 @@ function calculatePhase2(
         // 射程条件のバフはスキップ（conditionalGiveDamageで別途処理）
         if (buff.note === '射程条件') continue;
 
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
+
         // 自身に適用されるか判定
-        let appliesToSelf = buff.target === 'self';
+        let appliesToSelf = buff.target === 'self' || buff.target === 'all';
 
         // target=range の場合、条件タグに該当すれば自身にも適用
         if (buff.target === 'range' && buff.conditionTags && buff.conditionTags.length > 0) {
@@ -386,7 +398,7 @@ function calculatePhase2(
 
         // 動的バフの倍率を取得（味方数による累積）
         const dynamicMultiplier = getDynamicBuffMultiplier(buff, environment, character);
-        const conditionKey = buff.conditionTags?.sort().join(',') || 'no_condition';
+        const conditionKey = buff.conditionTags?.filter(t => t !== 'exclude_self').sort().join(',') || 'no_condition';
 
         // 乗算スタック: (1 + value/100)^count
         // 例: 15%バフが20体 → 1.15^20 ≈ 16.37倍
@@ -472,8 +484,11 @@ function calculatePhase2(
     for (const buff of allBuffs) {
         if (buff.stat !== 'critical_bonus' || buff.isActive === false) continue;
 
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
+
         // 自身に適用されるか判定
-        let appliesToSelf = buff.target === 'self';
+        let appliesToSelf = buff.target === 'self' || buff.target === 'all';
         if (buff.target === 'range' && buff.conditionTags && buff.conditionTags.length > 0) {
             if (areConditionsSatisfied(buff.conditionTags, character)) {
                 appliesToSelf = true;
@@ -588,8 +603,11 @@ function calculatePhase4(
     for (const buff of allBuffs) {
         if (buff.isActive === false) continue;
 
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
+
         // 自身に適用されるか判定
-        let appliesToSelf = buff.target === 'self';
+        let appliesToSelf = buff.target === 'self' || buff.target === 'all';
 
         // target=range の場合、条件タグに該当すれば自身にも適用
         if (buff.target === 'range' && buff.conditionTags && buff.conditionTags.length > 0) {
@@ -695,8 +713,11 @@ function calculateDPS(
 
     for (const buff of allBuffs) {
         if (buff.isActive === false) continue;
-        const appliesToSelf = buff.target === 'self' || buff.target === 'range';
+        const appliesToSelf = buff.target === 'self' || buff.target === 'range' || buff.target === 'all';
         if (!appliesToSelf) continue;
+
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
 
         // 条件タグをチェック
         if (buff.conditionTags && buff.conditionTags.length > 0) {
@@ -727,9 +748,10 @@ function calculateDPS(
     // 0または未設定の場合はキャラクターの最大数を使用
     let ambushSpeedMultiplier = 1;
     if (character.ambushInfo?.attackSpeedMultiplier) {
+        const maxCount = character.ambushInfo.maxCount;
         const ambushCount = (environment.currentAmbushCount && environment.currentAmbushCount > 0)
-            ? environment.currentAmbushCount
-            : character.ambushInfo.maxCount;
+            ? Math.min(environment.currentAmbushCount, maxCount)  // キャラクターの最大数で制限
+            : maxCount;
         if (ambushCount > 0) {
             if (character.ambushInfo.isMultiplicative) {
                 // 累乗計算: 1.4^2 = 1.96
@@ -810,7 +832,9 @@ function calculateSpecialAttackDamage(
     let selfDamageDealt = 0;
     for (const buff of allBuffs) {
         if (buff.stat !== 'damage_dealt' || buff.isActive === false) continue;
-        let appliesToSelf = buff.target === 'self';
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
+        let appliesToSelf = buff.target === 'self' || buff.target === 'all';
         if (buff.target === 'range' && buff.conditionTags?.length) {
             if (areConditionsSatisfied(buff.conditionTags, character)) {
                 appliesToSelf = true;
@@ -895,7 +919,9 @@ function calculateStrategyDamage(
     let selfDamageDealt = 0;
     for (const buff of allBuffs) {
         if (buff.stat !== 'damage_dealt' || buff.isActive === false) continue;
-        let appliesToSelf = buff.target === 'self';
+        // exclude_self タグがある場合は自身には適用しない
+        if (buff.conditionTags?.includes('exclude_self')) continue;
+        let appliesToSelf = buff.target === 'self' || buff.target === 'all';
         if (buff.target === 'range' && buff.conditionTags?.length) {
             if (areConditionsSatisfied(buff.conditionTags, character)) {
                 appliesToSelf = true;
@@ -1018,6 +1044,137 @@ function calculateStrategyDamage(
     };
 }
 
+/**
+ * 特殊能力モード（計略発動中の通常攻撃置換）のDPSを計算
+ *
+ * 例: ［竜焔］仙台城
+ * - 発動中（60秒）: 置換攻撃（2.5倍×2連）+ 与ダメ1.2倍 + 隙80%短縮 + 特殊攻撃（5回に1回）
+ * - 非発動中（CT 60秒）: 通常攻撃 + 特殊攻撃（5回に1回）
+ */
+function calculateAbilityModeDps(
+    phase2Damage: number,
+    phase5Damage: number,
+    character: Character,
+    environment: EnvironmentSettings,
+    normalDpsResult: { dps: number; breakdown: { totalFrames: number; attackFrames: number; gapFrames: number } }
+): DamageBreakdown['abilityMode'] | undefined {
+    const abilityMode = character.abilityMode;
+    if (!abilityMode) return undefined;
+
+    const { replacedAttack, giveDamage, gapReduction, duration, cooldown } = abilityMode;
+    const specialAttack = character.specialAttack;
+
+    const frameData = WEAPON_FRAMES[character.weapon];
+    if (!frameData) return undefined;
+
+    // ========================================
+    // 発動中のDPS計算
+    // ========================================
+
+    // 与えるダメージ倍率（Phase 2 乗算）
+    const giveDamageMultiplier = 1 + (giveDamage || 0) / 100;
+
+    // 隙短縮によるフレーム調整
+    const activeGapFrames = frameData.gap * (1 - (gapReduction || 0) / 100);
+    const activeTotalFrames = frameData.attack + activeGapFrames;
+
+    // 置換攻撃のダメージ（Phase 2ダメージ × 与ダメ倍率 × 置換攻撃倍率 × 連撃数）
+    const replacedAttackDamage = phase2Damage * giveDamageMultiplier * replacedAttack.multiplier * replacedAttack.hits;
+
+    // 置換攻撃のPhase 3/4処理
+    let effectiveDefense = environment.enemyDefense * (1 - environment.defenseDebuffPercent / 100);
+    effectiveDefense = Math.max(0, effectiveDefense - environment.defenseDebuffFlat);
+    const replacedAfterDefense = Math.max(1, replacedAttackDamage - effectiveDefense);
+
+    // Phase 4: 与ダメ・被ダメ（環境設定から）
+    const damageDealt = environment.damageDealt || 0;
+    const damageTaken = environment.damageTaken || 0;
+    const replacedFinalDamage = Math.floor(replacedAfterDefense * (1 + damageDealt / 100) * (1 + damageTaken / 100));
+
+    // 発動中のサイクルDPS
+    let activeDps: number;
+    if (specialAttack) {
+        // 特殊攻撃も与ダメ1.2倍の影響を受ける
+        const spMultiplier = specialAttack.multiplier;
+        const spHits = specialAttack.hits;
+        const cycleN = specialAttack.cycleN;
+
+        // 特殊攻撃のダメージ（Phase 2 × 与ダメ倍率 × 特殊攻撃倍率）
+        const spDamage = phase2Damage * giveDamageMultiplier * spMultiplier;
+
+        // 特殊攻撃のPhase 3（防御無視判定）
+        let spAfterDefense: number;
+        if (specialAttack.defenseIgnore) {
+            spAfterDefense = spDamage;
+        } else {
+            spAfterDefense = Math.max(1, spDamage - effectiveDefense);
+        }
+
+        // Phase 4 + 連撃
+        const spFinalDamage = Math.floor(spAfterDefense * (1 + damageDealt / 100) * (1 + damageTaken / 100)) * spHits;
+
+        // サイクルダメージ = 置換攻撃 × (N-1) + 特殊攻撃 × 1
+        const cycleDamage = replacedFinalDamage * (cycleN - 1) + spFinalDamage;
+        const cycleTime = activeTotalFrames * cycleN;
+        activeDps = cycleDamage / (cycleTime / 60);
+    } else {
+        // 特殊攻撃がない場合は置換攻撃のみ
+        activeDps = replacedFinalDamage / (activeTotalFrames / 60);
+    }
+
+    // ========================================
+    // 非発動中のDPS計算
+    // ========================================
+
+    // 通常攻撃のダメージ（phase5Damage = 連撃込み最終ダメージ）
+    const normalDamage = phase5Damage;
+    const normalTotalFrames = normalDpsResult.breakdown.totalFrames;
+
+    let inactiveDps: number;
+    if (specialAttack) {
+        const cycleN = specialAttack.cycleN;
+
+        // 既存の特殊攻撃サイクルDPS計算を使用
+        // 特殊攻撃ダメージは calculateSpecialAttackDamage で計算済み
+        const spResult = calculateSpecialAttackDamage(
+            0, // phase1Attack は使用しない
+            phase2Damage,
+            character,
+            environment
+        );
+
+        if (spResult) {
+            // サイクルダメージ = 通常攻撃 × (N-1) + 特殊攻撃 × 1
+            const cycleDamage = normalDamage * (cycleN - 1) + spResult.damage;
+            const cycleTime = normalTotalFrames * cycleN;
+            inactiveDps = cycleDamage / (cycleTime / 60);
+        } else {
+            inactiveDps = normalDpsResult.dps;
+        }
+    } else {
+        inactiveDps = normalDpsResult.dps;
+    }
+
+    // ========================================
+    // 平均DPS計算（時間加重）
+    // ========================================
+    const totalCycleTime = duration + cooldown;
+    const averageDps = (activeDps * duration + inactiveDps * cooldown) / totalCycleTime;
+    const uptime = duration / totalCycleTime;
+
+    return {
+        replacedAttack,
+        giveDamage,
+        gapReduction,
+        duration,
+        cooldown,
+        activeDps,
+        inactiveDps,
+        averageDps,
+        uptime,
+    };
+}
+
 // ========================================
 // メイン計算関数
 // ========================================
@@ -1114,6 +1271,15 @@ export function calculateDamage(
         };
     }
 
+    // 特殊能力モード（計略発動中の通常攻撃置換）のDPS計算
+    const abilityModeResult = calculateAbilityModeDps(
+        phase2.damage,
+        phase5.damage,
+        character,
+        environment,
+        dpsCalc
+    );
+
     // 鼓舞量計算（該当キャラのみ）
     let inspireAmount: number | undefined;
     const selfBuffs = character.selfBuffs;
@@ -1143,6 +1309,7 @@ export function calculateDamage(
             dps: dpsCalc.breakdown,
             specialAttack: specialAttackBreakdown,
             strategyDamage: strategyDamageBreakdown,
+            abilityMode: abilityModeResult,
         },
     };
 }

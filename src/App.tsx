@@ -19,7 +19,7 @@ import { ConfirmModal } from './ui/components/ConfirmModal';
 import { checkMapConstraints, type MapConstraints } from './core/logic/mapConstraints';
 
 // Simple Formation Saver UI Component
-import { Save, FolderOpen, Trash2, AlertTriangle } from 'lucide-react';
+import { Save, FolderOpen, Trash2, AlertTriangle, Users, ChevronDown } from 'lucide-react';
 
 type ActiveTab = 'matrix' | 'analysis';
 
@@ -44,13 +44,15 @@ export default function App() {
   const [mapConstraint, setMapConstraint] = useState<MapConstraints | null>(null);
   const [terrainSlots, setTerrainSlots] = useState<Record<string, number | null>>({});
   const [isMapSettingsOpen, setIsMapSettingsOpen] = useState(false);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const mapSettingsRef = useRef<HTMLDivElement | null>(null);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
 
   const loadMenuRef = useRef<HTMLDivElement | null>(null);
   const isSessionRestoredRef = useRef(false);
 
   // Persistence Hooks
-  const { savedCharacters, addCharacter: saveCharacter, removeCharacter: deleteCharacterFromStorage } = useCharacterStorage();
+  const { savedCharacters, addCharacter: saveCharacter, removeCharacter: deleteCharacterFromStorage, updateCharacter: updateCharacterInStorage } = useCharacterStorage();
   const { savedFormations, saveFormation: saveFormationToStorage, deleteFormation: deleteFormationFromStorage } = useFormationStorage();
 
   // Environment & Calc
@@ -213,6 +215,19 @@ export default function App() {
     setIsImporterOpen(false);
   };
 
+  // キャラクター更新ハンドラ（ストレージと編成の両方を更新）
+  const handleUpdateCharacter = (updated: Character) => {
+    // ストレージを更新
+    updateCharacterInStorage(updated);
+    // 編成内のキャラクターも更新
+    setFormation((prev) => ({
+      ...prev,
+      slots: prev.slots.map(slot =>
+        slot?.id === updated.id ? updated : slot
+      ),
+    }));
+  };
+
   // Formation Load/Save Handlers
   const handleSaveFormation = (name: string) => {
     saveFormationToStorage(name, formation);
@@ -334,27 +349,53 @@ export default function App() {
     };
   }, [isMapSettingsOpen]);
 
+  // Close summary on outside click / Esc
+  useEffect(() => {
+    if (!isSummaryOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (!summaryRef.current) return;
+      if (!summaryRef.current.contains(e.target as Node)) {
+        setIsSummaryOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsSummaryOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isSummaryOpen]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-gray-100 overflow-hidden font-sans">
 
       {/* Full Width Header */}
-      <header className="px-6 py-3 border-b border-gray-800 bg-[#0f1626] relative flex items-center justify-between shadow-sm z-20">
-        <div className="flex items-center gap-6 z-10">
+      <header className="px-4 py-2 border-b border-gray-800 bg-[#0f1626] flex flex-wrap items-center gap-3 shadow-sm z-20">
+        {/* Left: Title */}
+        <div className="flex items-center gap-4 shrink-0">
           <div>
             <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">ShiroPro Tools Reborn</p>
-            <h1 className="text-xl font-bold text-white tracking-tight">
+            <h1 className="text-lg font-bold text-white tracking-tight">
               {activeTab === 'matrix' ? '編成 & バフマトリックス' : 'ダメージ計算 & 分析'}
             </h1>
           </div>
         </div>
 
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        {/* Center: TabSwitcher */}
+        <div className="shrink-0">
           <TabSwitcher />
         </div>
 
-        <div className="flex items-center gap-4 z-10">
-          {/* Formation Summary */}
-          <div className="flex items-center gap-3 text-xs text-gray-400 bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-800">
+        {/* Spacer to push right content */}
+        <div className="flex-1 min-w-0"></div>
+
+        {/* Right side controls */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Formation Summary - Full version for large screens */}
+          <div className="hidden lg:flex items-center gap-3 text-xs text-gray-400 bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-800">
             <span className="flex items-center gap-1">近 <span className="text-white font-medium">{summary.melee}</span></span>
             <span className="w-px h-3 bg-gray-700"></span>
             <span className="flex items-center gap-1">遠 <span className="text-white font-medium">{summary.ranged}</span></span>
@@ -368,6 +409,46 @@ export default function App() {
             </div>
             <span className="w-px h-3 bg-gray-700"></span>
             <span><span className="text-white font-medium">{summary.total}</span>/8</span>
+          </div>
+
+          {/* Formation Summary - Compact version for smaller screens */}
+          <div className="lg:hidden relative" ref={summaryRef}>
+            <button
+              onClick={() => setIsSummaryOpen(!isSummaryOpen)}
+              className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-lg border transition-colors ${
+                isSummaryOpen
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              <Users size={14} />
+              <span className="font-medium">{summary.total}/8</span>
+              <ChevronDown size={12} className={`transition-transform ${isSummaryOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isSummaryOpen && (
+              <div className="absolute top-full right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl p-3 z-50 min-w-[140px]">
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">近</span>
+                    <span className="text-white font-medium">{summary.melee}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">遠</span>
+                    <span className="text-white font-medium">{summary.ranged}</span>
+                  </div>
+                  {Object.entries(summary.attrs).length > 0 && (
+                    <div className="border-t border-gray-700 pt-2 space-y-1">
+                      {Object.entries(summary.attrs).map(([label, count]) => (
+                        <div key={label} className="flex justify-between">
+                          <span className="text-gray-400">{label}</span>
+                          <span className="text-white font-medium">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Map Settings Button + Popover */}
@@ -595,6 +676,7 @@ export default function App() {
                     env={env}
                     onCharClick={onCharClick}
                     onRemove={(id) => removeCharacter(id)}
+                    onUpdateCharacter={handleUpdateCharacter}
                   />
                 </section>
               )}
