@@ -1,4 +1,4 @@
-import type { BuffMode, CostBuffType, Stat, Target } from '../types';
+import type { BuffMode, CostBuffType, Stat, Target } from '../types/index';
 
 export interface ParsedPattern {
     stat: Stat;
@@ -42,7 +42,7 @@ export const patterns: ParsedPattern[] = [
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:が|を)?(?:と[^0-9]+)?(\\d+(?:\\.\\d+)?)倍`), unit: '×', valueTransform: asPercentFromMultiplier },
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
-    { stat: 'attack', mode: 'flat_sum', regex: /攻撃(?:力)?(?:が|を|\+)\s*(\d+)(?![0-9]*[%％.])(?:上昇|増加|アップ)?/ },  // が|を|+ 必須、小数点も除外
+    { stat: 'attack', mode: 'flat_sum', regex: /攻撃(?:力)?(?:が|を|\+)\s*(\d+)(?![0-9]*[%％.倍])(?:上昇|増加|アップ)?/ },  // が|を|+ 必須、小数点・倍も除外
     { stat: 'enemy_attack', mode: 'percent_max', regex: new RegExp(`敵の?攻撃(?:力)?(?:と[^0-9]*)?(?:が|を)?\\s*(\\d+)${PCT}(?:低下|減少|ダウン)`) },
     { stat: 'enemy_attack', mode: 'flat_sum', regex: /敵の?攻撃(?:力)?(?:と[^0-9]*)?(?:が|を)?\s*(\d+)(?![%％.])(?:低下|減少|ダウン)/ },
 
@@ -58,9 +58,13 @@ export const patterns: ParsedPattern[] = [
 
     // 3. ダメージ系
     // Phase 2: give_damage（乗算）- 「与えるダメージ」「○倍のダメージを与える」「攻撃の○倍のダメージ」
-    { stat: 'give_damage', mode: 'percent_max', regex: /特殊攻撃のダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: '特殊攻撃' },
+    // 特殊攻撃の与えるダメージ: 「自身の特殊攻撃で与えるダメージが○倍」「特殊攻撃のダメージが○倍」
+    { stat: 'give_damage', mode: 'percent_max', regex: /特殊攻撃(?:で|の)(?:与える)?ダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: '特殊攻撃' },
     { stat: 'give_damage', mode: 'percent_max', regex: /(\d+(?:\.\d+)?)倍のダメージを与える/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: /攻撃の?(\d+(?:\.\d+)?)倍のダメージ/, valueTransform: asPercentFromMultiplier, unit: '×' },
+    // 射程条件付き与えるダメージ: 「射程が○以上の場合与えるダメージが○倍」
+    // 注: このパターンは analyzer.ts で閾値を抽出し、conditionalGiveDamage として処理される
+    { stat: 'give_damage', mode: 'percent_max', regex: /射程[がを]?\d+以上の?場合.*?与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: '射程条件' },
     // 「与えるダメージ」は give_damage（Phase 2）- 「与ダメ」より先にマッチさせる
     { stat: 'give_damage', mode: 'percent_max', regex: /与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
@@ -75,13 +79,15 @@ export const patterns: ParsedPattern[] = [
     { stat: 'enemy_damage_dealt', mode: 'percent_max', regex: new RegExp(`敵の?.*?与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:低下|減少|ダウン)`) },  // 敵の与ダメ低下（防御貢献）
     { stat: 'damage_recovery', mode: 'percent_max', regex: new RegExp(`与ダメの?(\\d+)${PCT}.*?回復`) },
     { stat: 'critical_bonus', mode: 'absolute_set', regex: new RegExp(`直撃ボーナスが(\\d+)${PCT}に上昇`) },
-    { stat: 'critical_bonus', mode: 'percent_max', regex: new RegExp(`直撃ボーナスが(\\d+)${PCT}上昇`) },
+    { stat: 'critical_bonus', mode: 'percent_max', regex: new RegExp(`直撃ボーナスが(\\d+)${PCT}(?:上昇)?`) },  // 「直撃ボーナスが120%」「直撃ボーナスが120%上昇」両対応
 
     // 4. 射程・対象数系
     { stat: 'enemy_range', mode: 'percent_max', regex: new RegExp(`射程(?:が|を)?\\s*(\\d+)${PCT}?(?:低下|減少|ダウン)`) },
     { stat: 'range', mode: 'percent_max', regex: /射程(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, unit: '×', valueTransform: asPercentFromMultiplier },
     { stat: 'range', mode: 'percent_max', regex: new RegExp(`射程(?:が|を)?\\s*([+-]?\\d+)${PCT}(?!低下|減少|ダウン)`) },
-    { stat: 'range', mode: 'flat_sum', regex: /射程(?:が|を|[+-])?\s*([+-]?\d+)(?![0-9%％.倍])/ },  // が|を|+|- 許容、数字・小数点・倍・%除外
+    // 「巨大化段階に応じて射程が上昇(最大○)」- 最大値をflat_sumとして扱う
+    { stat: 'range', mode: 'flat_sum', regex: /巨大化段階に応じて射程が上昇[（(]最大(\d+)/, note: '巨大化依存（最大値）' },
+    { stat: 'range', mode: 'flat_sum', regex: /射程(?:が|を|[+-])?\s*([+-]?\d+)(?![0-9%％.倍])(?!以上|以下|未満)/ },  // が|を|+|- 許容、条件文（以上/以下/未満）も除外
     { stat: 'target_count', mode: 'flat_sum', regex: /対象(?:が)?\s*([+-]?\d+)増加/ },
     { stat: 'attack_count', mode: 'flat_sum', regex: /攻撃回数(?:が)?\s*([+-]?\d+)/ },
 
