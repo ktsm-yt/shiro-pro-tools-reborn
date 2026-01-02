@@ -38,4 +38,5 @@ export const WEAPON_FRAMES: Record<string, WeaponFrameData> = {
     '鞭': { attack: 24, gap: 21, total: 45 },
     '陣貝': { attack: 218, gap: 0, total: 218, multiHit: 18, note: '18連撃＋範囲回復' },
     '軍船': { attack: 32, gap: 42, total: 74 },
+    'その他': { attack: 37, gap: 30, total: 67, note: '杖と同じフレーム' },  // シバルバー等
 };

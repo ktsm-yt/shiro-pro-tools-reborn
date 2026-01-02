@@ -55,6 +55,13 @@ export function removeCharacterFromStorage(charId: string): Character[] {
     return next;
 }
 
+export function updateCharacterInStorage(char: Character): Character[] {
+    const current = loadCharacters();
+    const next = current.map(c => c.id === char.id ? { ...c, ...char, savedAt: (c as any).savedAt || Date.now() } : c);
+    saveCharacters(next);
+    return next;
+}
+
 // Formations
 export function saveFormations(formations: StoredFormation[]): void {
     saveItem(STORAGE_KEYS.FORMATIONS, formations);

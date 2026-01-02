@@ -35,6 +35,7 @@ export const weaponMapping: Record<string, WeaponInfo> = {
     鈴: { range: '遠', type: '術', placement: '遠' },
     祓串: { range: '遠', type: '術', placement: '遠' },
     本: { range: '遠', type: '術', placement: '遠' },
+    その他: { range: '遠', type: '術', placement: '遠' },  // シバルバー等
 
     // 遠近両用物理
     投剣: { range: '遠', type: '物', placement: '遠近' },

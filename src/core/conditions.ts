@@ -114,10 +114,11 @@ export const CONDITION_DETECTION_PATTERNS: ConditionDetectionPattern[] = [
     { pattern: /巨大化(?:が)?1(?:段階|回)?以上/i, tags: ['giant_1_plus'], priority: 70, exclusive: true, category: 'giant_level' },
 
     // 属性
-    { pattern: /水(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['water'], priority: 80, exclusive: false, category: 'attribute' },
-    { pattern: /平(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['plain'], priority: 80, exclusive: false, category: 'attribute' },
-    { pattern: /山(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['mountain'], priority: 80, exclusive: false, category: 'attribute' },
+    // 平山を先に判定（priority 85）してから、平/山は否定先読み/後読みで平山を除外
     { pattern: /平山(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['plain_mountain'], priority: 85, exclusive: false, category: 'attribute' },
+    { pattern: /水(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['water'], priority: 80, exclusive: false, category: 'attribute' },
+    { pattern: /平(?!山)(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['plain'], priority: 80, exclusive: false, category: 'attribute' },
+    { pattern: /(?<!平)山(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['mountain'], priority: 80, exclusive: false, category: 'attribute' },
     { pattern: /地獄(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['hell'], priority: 80, exclusive: false, category: 'attribute' },
     { pattern: /架空(?:城)?(?:のみ|限定)?/i, tags: ['fictional'], priority: 80, exclusive: false, category: 'attribute' },
 
@@ -132,7 +133,8 @@ export const CONDITION_DETECTION_PATTERNS: ConditionDetectionPattern[] = [
     { pattern: /花嫁(?:属性)?(?:城娘)?(?:のみ|限定)?/i, tags: ['bride'], priority: 80, exclusive: false, category: 'season' },
 
     // 対象種別
-    { pattern: /伏兵(?:のみ|限定)?/i, tags: ['ambush'], priority: 75, exclusive: false, category: 'target_type' },
+    // 「伏兵のみ」「伏兵限定」のみマッチ（「自身の伏兵」「対象の伏兵」は除外）
+    { pattern: /伏兵(?:のみ|限定)/i, tags: ['ambush'], priority: 75, exclusive: false, category: 'target_type' },
     // 「殿のみ」「殿限定」は殿専用、「殿と城娘」などは含めない
     { pattern: /殿(?:のみ|限定)/i, tags: ['lord'], priority: 75, exclusive: false, category: 'target_type' },
 

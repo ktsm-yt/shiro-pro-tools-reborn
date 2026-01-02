@@ -160,6 +160,341 @@ describe('damageCalculator', () => {
             // (1000 × 1.4 + 100 + 500 × 1.4) × 1.4 = (1400 + 100 + 700) × 1.4 = 3080
             expect(result.phase1Attack).toBeCloseTo(3080, 0);
         });
+
+        test('射程→攻撃変換（閾値なし）', () => {
+            const character = createTestCharacter({
+                baseStats: {
+                    hp: 0,
+                    attack: 1000,
+                    defense: 0,
+                    range: 400, // 基礎射程400
+                    recovery: 0,
+                    cooldown: 0,
+                    cost: 0,
+                    damage_dealt: 0,
+                    damage_taken: 0,
+                    attack_speed: 0,
+                    attack_gap: 0,
+                    movement_speed: 0,
+                    retreat: 0,
+                    target_count: 0,
+                    ki_gain: 0,
+                    damage_drain: 0,
+                    ignore_defense: 0,
+                    enemy_attack: 0,
+                    enemy_defense: 0,
+                    enemy_defense_ignore_complete: 0,
+                    enemy_defense_ignore_percent: 0,
+                    enemy_movement: 0,
+                    enemy_retreat: 0,
+                    strategy_cooldown: 0,
+                    damage_recovery: 0,
+                    give_damage: 0,
+                    inspire: 0,
+                    attack_count: 0,
+                },
+                rangeToAttack: { enabled: true },
+                skills: [
+                    {
+                        id: 'range-buff',
+                        stat: 'range',
+                        mode: 'flat_sum',
+                        value: 100,
+                        source: 'self_skill',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+            });
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 基礎攻撃1000 + 射程(400+100)=500が加算 → 1500
+            expect(result.phase1Attack).toBe(1500);
+            expect(result.breakdown.phase1.flatBuffDetails).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ value: 500, condition: '射程→攻撃' }),
+                ])
+            );
+        });
+
+        test('射程→攻撃変換（%バフも考慮）', () => {
+            const character = createTestCharacter({
+                baseStats: {
+                    hp: 0,
+                    attack: 1000,
+                    defense: 0,
+                    range: 500, // 基礎射程500
+                    recovery: 0,
+                    cooldown: 0,
+                    cost: 0,
+                    damage_dealt: 0,
+                    damage_taken: 0,
+                    attack_speed: 0,
+                    attack_gap: 0,
+                    movement_speed: 0,
+                    retreat: 0,
+                    target_count: 0,
+                    ki_gain: 0,
+                    damage_drain: 0,
+                    ignore_defense: 0,
+                    enemy_attack: 0,
+                    enemy_defense: 0,
+                    enemy_defense_ignore_complete: 0,
+                    enemy_defense_ignore_percent: 0,
+                    enemy_movement: 0,
+                    enemy_retreat: 0,
+                    strategy_cooldown: 0,
+                    damage_recovery: 0,
+                    give_damage: 0,
+                    inspire: 0,
+                    attack_count: 0,
+                },
+                rangeToAttack: { enabled: true },
+                skills: [
+                    {
+                        id: 'range-buff-flat',
+                        stat: 'range',
+                        mode: 'flat_sum',
+                        value: 100, // +100
+                        source: 'self_skill',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+                strategies: [
+                    {
+                        id: 'range-buff-percent',
+                        stat: 'range',
+                        mode: 'percent_max',
+                        value: 80, // +80%
+                        source: 'strategy',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+            });
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 最終射程 = 500 × 1.8 + 100 = 1000
+            // 基礎攻撃1000 + 射程1000が加算 → 2000
+            expect(result.phase1Attack).toBe(2000);
+        });
+
+        test('射程→攻撃変換（閾値1000以上で発動 - [竜焔]仙台城）', () => {
+            const character = createTestCharacter({
+                baseStats: {
+                    hp: 0,
+                    attack: 1000,
+                    defense: 0,
+                    range: 648, // [竜焔]仙台城の基礎射程
+                    recovery: 0,
+                    cooldown: 0,
+                    cost: 0,
+                    damage_dealt: 0,
+                    damage_taken: 0,
+                    attack_speed: 0,
+                    attack_gap: 0,
+                    movement_speed: 0,
+                    retreat: 0,
+                    target_count: 0,
+                    ki_gain: 0,
+                    damage_drain: 0,
+                    ignore_defense: 0,
+                    enemy_attack: 0,
+                    enemy_defense: 0,
+                    enemy_defense_ignore_complete: 0,
+                    enemy_defense_ignore_percent: 0,
+                    enemy_movement: 0,
+                    enemy_retreat: 0,
+                    strategy_cooldown: 0,
+                    damage_recovery: 0,
+                    give_damage: 0,
+                    inspire: 0,
+                    attack_count: 0,
+                },
+                rangeToAttack: { enabled: true, threshold: 1000 },
+                skills: [
+                    {
+                        id: 'range-buff-skill',
+                        stat: 'range',
+                        mode: 'flat_sum',
+                        value: 100, // 特技で+100
+                        source: 'self_skill',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+                strategies: [
+                    {
+                        id: 'range-buff-strategy',
+                        stat: 'range',
+                        mode: 'flat_sum',
+                        value: 400, // 計略最大で+400
+                        source: 'strategy',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+            });
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 最終射程 = 648 + 100 + 400 = 1148 >= 1000 → 発動
+            // 基礎攻撃1000 + 射程1148が加算 → 2148
+            expect(result.phase1Attack).toBe(2148);
+            expect(result.breakdown.phase1.flatBuffDetails).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ value: 1148, condition: '射程→攻撃' }),
+                ])
+            );
+        });
+
+        test('射程→攻撃変換（閾値未満で発動しない）', () => {
+            const character = createTestCharacter({
+                baseStats: {
+                    hp: 0,
+                    attack: 1000,
+                    defense: 0,
+                    range: 648, // [竜焔]仙台城の基礎射程
+                    recovery: 0,
+                    cooldown: 0,
+                    cost: 0,
+                    damage_dealt: 0,
+                    damage_taken: 0,
+                    attack_speed: 0,
+                    attack_gap: 0,
+                    movement_speed: 0,
+                    retreat: 0,
+                    target_count: 0,
+                    ki_gain: 0,
+                    damage_drain: 0,
+                    ignore_defense: 0,
+                    enemy_attack: 0,
+                    enemy_defense: 0,
+                    enemy_defense_ignore_complete: 0,
+                    enemy_defense_ignore_percent: 0,
+                    enemy_movement: 0,
+                    enemy_retreat: 0,
+                    strategy_cooldown: 0,
+                    damage_recovery: 0,
+                    give_damage: 0,
+                    inspire: 0,
+                    attack_count: 0,
+                },
+                rangeToAttack: { enabled: true, threshold: 1000 },
+                skills: [
+                    {
+                        id: 'range-buff-skill',
+                        stat: 'range',
+                        mode: 'flat_sum',
+                        value: 100, // 特技で+100のみ（計略なし）
+                        source: 'self_skill',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+            });
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 最終射程 = 648 + 100 = 748 < 1000 → 発動しない
+            // 基礎攻撃1000のまま
+            expect(result.phase1Attack).toBe(1000);
+            expect(result.breakdown.phase1.flatBuffDetails).not.toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ condition: '射程→攻撃' }),
+                ])
+            );
+        });
+    });
+
+    describe('Phase 2: 条件付きダメージ倍率', () => {
+        test('条件付き与えるダメージ（射程条件満たす場合）', () => {
+            const character = createTestCharacter({
+                baseStats: {
+                    attack: 1000,
+                    range: 800,  // 基礎射程800
+                },
+                skills: [
+                    {
+                        id: 'range-buff',
+                        stat: 'range',
+                        mode: 'flat_sum',
+                        value: 300,  // +300 で合計1100
+                        source: 'self_skill',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+                conditionalGiveDamage: [
+                    { rangeThreshold: 1000, multiplier: 2 },  // 射程1000以上で2倍
+                ],
+            });
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // Phase2で2倍が適用される
+            expect(result.phase2Damage).toBe(2000);
+            expect(result.breakdown.phase2.multipliers).toContainEqual(
+                expect.objectContaining({ type: 'give_damage（射程1000+）', value: 2 })
+            );
+        });
+
+        test('条件付き与えるダメージ（射程条件満たさない場合）', () => {
+            const character = createTestCharacter({
+                baseStats: {
+                    attack: 1000,
+                    range: 800,  // 基礎射程800（条件未達）
+                },
+                conditionalGiveDamage: [
+                    { rangeThreshold: 1000, multiplier: 2 },
+                ],
+            });
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 条件を満たさないので倍率適用なし
+            expect(result.phase2Damage).toBe(1000);
+            expect(result.breakdown.phase2.multipliers).not.toContainEqual(
+                expect.objectContaining({ type: expect.stringContaining('射程') })
+            );
+        });
+
+        test('複数の与えるダメージ倍率（特殊攻撃 + 通常 + 条件付き）', () => {
+            const character = createTestCharacter({
+                baseStats: {
+                    attack: 1000,
+                    range: 1200,  // 条件満たす
+                },
+                skills: [
+                    {
+                        id: 'special-give-damage',
+                        stat: 'give_damage',
+                        mode: 'percent_max',
+                        value: 30,  // 1.3倍
+                        source: 'self_skill',
+                        target: 'self',
+                        isActive: true,
+                        note: '特殊攻撃',
+                    },
+                    {
+                        id: 'normal-give-damage',
+                        stat: 'give_damage',
+                        mode: 'percent_max',
+                        value: 20,  // 1.2倍（最大値ルールで無視される）
+                        source: 'self_skill',
+                        target: 'self',
+                        isActive: true,
+                    },
+                ],
+                conditionalGiveDamage: [
+                    { rangeThreshold: 1000, multiplier: 2 },  // 2倍
+                ],
+            });
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 1000 × 1.3（特殊攻撃give_damage最大） × 2（条件付き） = 2600
+            expect(result.phase2Damage).toBe(2600);
+        });
     });
 
     describe('Phase 3: 防御力による減算', () => {
@@ -267,6 +602,181 @@ describe('damageCalculator', () => {
         });
     });
 
+    describe('特殊攻撃', () => {
+        test('連撃数がダメージに反映される（2連撃）', () => {
+            const character = createTestCharacter({
+                weapon: '刀',
+            });
+            // 2.5倍の2連撃、5回に1回発動
+            character.specialAttack = {
+                multiplier: 2.5,
+                hits: 2,
+                defenseIgnore: false,
+                cycleN: 5,
+            };
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 特殊攻撃ダメージ = 1000 × 2.5 × 2連撃 = 5000
+            expect(result.breakdown.specialAttack).toBeDefined();
+            expect(result.breakdown.specialAttack!.damage).toBe(5000);
+            expect(result.breakdown.specialAttack!.hits).toBe(2);
+            expect(result.breakdown.specialAttack!.multiplier).toBe(2.5);
+        });
+
+        test('連撃数がサイクルDPSに反映される', () => {
+            const character = createTestCharacter({
+                weapon: '刀',
+            });
+            // 2.5倍の2連撃、5回に1回発動
+            character.specialAttack = {
+                multiplier: 2.5,
+                hits: 2,
+                defenseIgnore: false,
+                cycleN: 5,
+            };
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 刀: attack=19, gap=22, total=41フレーム
+            // 通常ダメージ = 1000
+            // 特殊攻撃ダメージ = 1000 × 2.5 × 2 = 5000
+            // サイクル合計 = 4 × 1000 + 5000 = 9000
+            // サイクル時間 = 41 × 5 = 205フレーム = 3.417秒
+            // サイクルDPS = 9000 / 3.417 ≈ 2634
+            expect(result.breakdown.specialAttack!.cycleDps).toBeCloseTo(2634, 0);
+        });
+
+        test('連撃数1の場合は通常計算', () => {
+            const character = createTestCharacter({
+                weapon: '刀',
+            });
+            // 6倍の1連撃（通常の特殊攻撃）、3回に1回発動
+            character.specialAttack = {
+                multiplier: 6,
+                hits: 1,
+                defenseIgnore: false,
+                cycleN: 3,
+            };
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 特殊攻撃ダメージ = 1000 × 6 × 1 = 6000
+            expect(result.breakdown.specialAttack!.damage).toBe(6000);
+            expect(result.breakdown.specialAttack!.hits).toBe(1);
+        });
+
+        test('与えるダメージ倍率が連撃にも適用される', () => {
+            const character = createTestCharacter({
+                weapon: '刀',
+            });
+            // 与えるダメージ1.2倍のスキル
+            character.skills = [{
+                stat: 'give_damage',
+                value: 20, // 1.2倍 = 20%増加
+                mode: 'percent_max',
+                source: 'skill',
+                target: 'self',
+                note: '与えるダメージ1.2倍',
+            }];
+            // 2.5倍の2連撃
+            character.specialAttack = {
+                multiplier: 2.5,
+                hits: 2,
+                defenseIgnore: false,
+                cycleN: 5,
+            };
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // Phase 2: 1000 × 1.2 = 1200
+            // 特殊攻撃ダメージ = 1200 × 2.5 × 2 = 6000
+            expect(result.breakdown.specialAttack!.damage).toBe(6000);
+        });
+    });
+
+    describe('計略ダメージ', () => {
+        test('計略バフ効果（隙80%短縮、与えるダメージ1.2倍）+ 2.5倍2連撃 + 5回に1回発動', () => {
+            const character = createTestCharacter({
+                weapon: '刀',
+            });
+
+            // 計略ダメージ: 2.5倍の2連撃、60秒間のバフ
+            character.strategyDamage = {
+                multiplier: 2.5,
+                hits: 2,
+                defenseIgnore: false,
+                cycleDuration: 60,
+                buffDuration: 60,
+                buffGiveDamage: 1.2, // 与えるダメージ1.2倍
+                buffAttackGap: 80,   // 隙80%短縮
+            };
+
+            // 特殊攻撃: 2.5倍の2連撃、5回に1回発動
+            character.specialAttack = {
+                multiplier: 2.5,
+                hits: 2,
+                defenseIgnore: false,
+                cycleN: 5,
+            };
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 計略ダメージ確認
+            expect(result.breakdown.strategyDamage).toBeDefined();
+            const sd = result.breakdown.strategyDamage!;
+
+            // 瞬間ダメージ = 1000 × 2.5 × 2 = 5000
+            expect(sd.instantDamage).toBe(5000);
+
+            // バフ効果中DPSが計算されている
+            expect(sd.buffedDps).toBeDefined();
+            expect(sd.buffedDps).toBeGreaterThan(result.dps);
+
+            // 刀: attack=19, gap=22
+            // 隙80%短縮: gap = 22 × 0.2 = 4.4
+            // 合計フレーム = 19 + 4.4 = 23.4
+            // 与えるダメージ1.2倍: damage = 1000 × 1.2 = 1200
+            // 通常DPS ≈ 1463 (フレーム41で1000ダメージ)
+            // バフDPS ≈ 1463 × 1.2 × (41 / 23.4) ≈ 3077
+            expect(sd.buffedDps).toBeCloseTo(3077, -1); // 10の位で丸め
+
+            // 特殊攻撃サイクルDPSが計算されている（5回に1回発動）
+            expect(sd.buffedCycleDps).toBeDefined();
+            // バフ効果中の1攻撃ダメージ = buffedDps × (23.4/60) ≈ 1200
+            // 特殊攻撃ダメージ = 1200 × 2.5 × 2 = 6000
+            // サイクル合計 = 4 × 1200 + 6000 = 10800
+            // サイクル時間 = 23.4 × 5 = 117フレーム = 1.95秒
+            // サイクルDPS ≈ 10800 / 1.95 ≈ 5538
+            expect(sd.buffedCycleDps).toBeCloseTo(5538, -2); // 100の位で丸め
+        });
+
+        test('隙短縮のみでDPSが上昇する', () => {
+            const character = createTestCharacter({
+                weapon: '刀',
+            });
+
+            // 計略ダメージ: シンプルな2倍の1連撃、隙50%短縮のみ
+            character.strategyDamage = {
+                multiplier: 2,
+                hits: 1,
+                defenseIgnore: false,
+                cycleDuration: 30,
+                buffDuration: 30,
+                buffAttackGap: 50, // 隙50%短縮
+            };
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            expect(result.breakdown.strategyDamage).toBeDefined();
+            const sd = result.breakdown.strategyDamage!;
+
+            // 刀: attack=19, gap=22, total=41
+            // 隙50%短縮: gap = 22 × 0.5 = 11
+            // 合計フレーム = 19 + 11 = 30
+            // DPS増加率 = 41 / 30 ≈ 1.367
+            // 通常DPS ≈ 1463
+            // バフDPS ≈ 1463 × 1.367 ≈ 2000
+            expect(sd.buffedDps).toBeCloseTo(2000, 0);
+        });
+    });
+
     describe('差分計算', () => {
         test('ダメージ差分の計算', () => {
             const character = createTestCharacter();
@@ -296,6 +806,223 @@ describe('damageCalculator', () => {
         test('truncateName', () => {
             expect(truncateName('絢爛ダノター城', 4)).toBe('絢爛ダノ');
             expect(truncateName('短い名前', 10)).toBe('短い名前');
+        });
+    });
+
+    describe('伏兵配置による累乗バフ（千賀地氏城など）', () => {
+        test('should apply multiplicative stacking for ambush buffs with 2 units', () => {
+            const character: Character = {
+                id: 'test-ambush',
+                name: '千賀地氏城',
+                weapon: '投剣',
+                attributes: ['平'],
+                baseStats: { attack: 1000 },
+                skills: [],
+                strategies: [],
+                ambushInfo: {
+                    maxCount: 2,
+                    attackMultiplier: 1.4,
+                    attackSpeedMultiplier: 1.4,
+                    isMultiplicative: true,
+                },
+            };
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 伏兵2体: 1.4^2 = 1.96
+            // Phase1攻撃力 = 1000 * 1.96 = 1960
+            expect(result.phase1Attack).toBeCloseTo(1960, 0);
+        });
+
+        test('should apply multiplicative stacking for attack speed', () => {
+            const character: Character = {
+                id: 'test-ambush-speed',
+                name: '千賀地氏城',
+                weapon: '投剣',
+                attributes: ['平'],
+                baseStats: { attack: 1000 },
+                skills: [],
+                strategies: [],
+                ambushInfo: {
+                    maxCount: 2,
+                    attackMultiplier: 1.4,
+                    attackSpeedMultiplier: 1.4,
+                    isMultiplicative: true,
+                },
+            };
+
+            const resultWith2 = calculateDamage(character, defaultEnvironment);
+
+            // 伏兵1体の場合
+            const resultWith1 = calculateDamage(character, {
+                ...defaultEnvironment,
+                currentAmbushCount: 1,
+            });
+
+            // 伏兵2体の方がDPSが高い（攻撃速度も上昇するため）
+            expect(resultWith2.dps).toBeGreaterThan(resultWith1.dps);
+            // 攻撃力も2体の方が高い（1.4^2 vs 1.4^1）
+            expect(resultWith2.phase1Attack).toBeCloseTo(resultWith1.phase1Attack * 1.4, 0);
+        });
+
+        test('should use currentAmbushCount from environment if specified', () => {
+            const character: Character = {
+                id: 'test-ambush-count',
+                name: '千賀地氏城',
+                weapon: '投剣',
+                attributes: ['平'],
+                baseStats: { attack: 1000 },
+                skills: [],
+                strategies: [],
+                ambushInfo: {
+                    maxCount: 2,
+                    attackMultiplier: 1.4,
+                    attackSpeedMultiplier: 1.4,
+                    isMultiplicative: true,
+                },
+            };
+
+            // 0体の場合 → 最大数（2体）を使用
+            const resultWith0 = calculateDamage(character, {
+                ...defaultEnvironment,
+                currentAmbushCount: 0,
+            });
+            expect(resultWith0.phase1Attack).toBeCloseTo(1960, 0);
+
+            // 1体の場合
+            const resultWith1 = calculateDamage(character, {
+                ...defaultEnvironment,
+                currentAmbushCount: 1,
+            });
+            expect(resultWith1.phase1Attack).toBeCloseTo(1400, 0);
+
+            // デフォルト（maxCount = 2体）
+            const resultDefault = calculateDamage(character, defaultEnvironment);
+            expect(resultDefault.phase1Attack).toBeCloseTo(1960, 0);
+
+            // 明示的に2体
+            const resultWith2 = calculateDamage(character, {
+                ...defaultEnvironment,
+                currentAmbushCount: 2,
+            });
+            expect(resultWith2.phase1Attack).toBeCloseTo(1960, 0);
+        });
+
+        test('should apply additive stacking when isMultiplicative is false', () => {
+            const character: Character = {
+                id: 'test-ambush-additive',
+                name: 'テスト城',
+                weapon: '投剣',
+                attributes: ['平'],
+                baseStats: { attack: 1000 },
+                skills: [],
+                strategies: [],
+                ambushInfo: {
+                    maxCount: 2,
+                    attackMultiplier: 1.4,
+                    isMultiplicative: false,
+                },
+            };
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 加算: 1 + 0.4 * 2 = 1.8
+            // Phase1攻撃力 = 1000 * 1.8 = 1800
+            expect(result.phase1Attack).toBeCloseTo(1800, 0);
+        });
+    });
+
+    describe('動的バフ（per_ally）', () => {
+        test('should apply per_ally flat attack buff with currentAmbushCount (ドレッドノート式)', () => {
+            const character: Character = {
+                id: 'test-per-ally-attack',
+                name: 'テスト城',
+                weapon: '大砲',
+                attributes: ['水'],
+                baseStats: { attack: 1000 },
+                skills: [{
+                    id: 'per-ally-buff',
+                    stat: 'attack',
+                    mode: 'flat_sum',
+                    value: 150, // 味方1体につき+150
+                    source: 'strategy',
+                    target: 'self',
+                    isActive: true,
+                    isDynamic: true,
+                    dynamicType: 'per_ally_other',
+                }],
+                strategies: [],
+            };
+
+            // 味方3体の場合
+            const resultWith3 = calculateDamage(character, {
+                ...defaultEnvironment,
+                currentAmbushCount: 3,
+            });
+            // 1000 + 150 * 3 = 1450
+            expect(resultWith3.phase1Attack).toBeCloseTo(1450, 0);
+        });
+
+        test('should apply per_ally give_damage buff with currentAmbushCount (ドレッドノート式)', () => {
+            const character: Character = {
+                id: 'test-per-ally-givedamage',
+                name: 'テスト城',
+                weapon: '大砲',
+                attributes: ['水'],
+                baseStats: { attack: 1000 },
+                skills: [],
+                strategies: [{
+                    id: 'per-ally-givedamage',
+                    stat: 'give_damage',
+                    mode: 'percent_max',
+                    value: 15, // 味方1体につき与ダメ+15%
+                    source: 'strategy',
+                    target: 'self',
+                    isActive: true,
+                    isDynamic: true,
+                    dynamicType: 'per_ally_other',
+                }],
+            };
+
+            // 味方3体の場合
+            const resultWith3 = calculateDamage(character, {
+                ...defaultEnvironment,
+                currentAmbushCount: 3,
+            });
+            // Phase1: 1000
+            // Phase2: 1000 * 1.15^3 = 1000 * 1.520875 ≈ 1520.88（乗算スタック）
+            expect(resultWith3.phase1Attack).toBe(1000);
+            expect(resultWith3.phase2Damage).toBeCloseTo(1520.875, 0);
+        });
+
+        test('should default to 1 when currentAmbushCount is 0 for per_ally', () => {
+            const character: Character = {
+                id: 'test-per-ally-default',
+                name: 'テスト城',
+                weapon: '大砲',
+                attributes: ['水'],
+                baseStats: { attack: 1000 },
+                skills: [{
+                    id: 'per-ally-buff',
+                    stat: 'attack',
+                    mode: 'flat_sum',
+                    value: 150,
+                    source: 'strategy',
+                    target: 'self',
+                    isActive: true,
+                    isDynamic: true,
+                    dynamicType: 'per_ally_other',
+                }],
+                strategies: [],
+            };
+
+            // 0体の場合 → デフォルト1として扱う
+            const resultWith0 = calculateDamage(character, {
+                ...defaultEnvironment,
+                currentAmbushCount: 0,
+            });
+            // 1000 + 150 * 1 = 1150
+            expect(resultWith0.phase1Attack).toBeCloseTo(1150, 0);
         });
     });
 });

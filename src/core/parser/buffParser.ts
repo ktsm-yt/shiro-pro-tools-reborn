@@ -30,6 +30,7 @@ export interface ParsedBuff {
     unitValue?: number;
     dynamicParameter?: string;
     requiresAmbush?: boolean;
+    benefitsOnlySelf?: boolean;   // 敵デバフだが自分だけが恩恵を受ける（自分のみ）
     confidence?: 'certain' | 'inferred' | 'uncertain';
     inferenceReason?: string;
 }
@@ -177,8 +178,19 @@ function expandParallelStats(line: string): string[] {
             const stats = [match.groups.stat1, match.groups.stat2, match.groups.stat3].filter(Boolean);
             if (stats.length >= 2) {
                 // 残りの部分（数値や効果など）を抽出
-                const remainder = line.slice(match.index + match[0].length);
+                let remainder = line.slice(match.index + match[0].length);
                 const prefix = line.slice(0, match.index);
+
+                // 未認識のstat（例: "範囲攻撃の範囲"）で始まる場合、数値部分のみを抽出
+                // "範囲攻撃の範囲2倍" → "2倍"
+                const unrecognizedPrefixMatch = remainder.match(/^[^0-9]*?(\d+(?:\.\d+)?(?:倍|[%％]))/);
+                if (unrecognizedPrefixMatch && unrecognizedPrefixMatch.index === 0) {
+                    // 数値部分のみを残す
+                    const valueMatch = remainder.match(/(\d+(?:\.\d+)?(?:倍|[%％]).*)/);
+                    if (valueMatch) {
+                        remainder = valueMatch[1];
+                    }
+                }
 
                 // 各statに対して個別の行を生成
                 return stats.map(stat => {
@@ -365,13 +377,16 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
     const seen = new Set<string>();
     const detectedTarget = detectTarget(line);
     // 効果重複の位置を検出（その位置より前のバフにのみ適用）
-    const duplicateMatch = originalLine.match(/効果重複|同種効果重複|同種効果と重複|重複可|重複可能/);
+    // 「割合重複」も同じく効果重複として扱う
+    const duplicateMatch = originalLine.match(/効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/);
     const duplicatePosition = duplicateMatch ? originalLine.indexOf(duplicateMatch[0]) : -1;
     const isExplicitlyNonDuplicate = /同種効果の重複無し|重複不可/.test(originalLine);
     const nonStacking = /重複なし/.test(originalLine) || isExplicitlyNonDuplicate;
     const stackPenaltyMatch = originalLine.match(/重複時効果(\d+)%減少/);
     const stackPenalty = stackPenaltyMatch ? Number(stackPenaltyMatch[1]) : undefined;
     const requiresAmbush = /伏兵の射程内/.test(originalLine);
+    // 「(自分のみ)」「（自分のみ）」検出 - 敵デバフだが自分だけが恩恵を受ける
+    const benefitsOnlySelf = /[（(]自分のみ[）)]/.test(originalLine);
     const maxStacksMatch = originalLine.match(/[（(](\d+)回まで[）)]/);
     const maxStacks = maxStacksMatch ? Number(maxStacksMatch[1]) : undefined;
     const stackableTrigger = /(敵撃破(?:毎|ごと)に|巨大化(?:毎|ごと)に|配置(?:毎|ごと)に)/.test(originalLine);
@@ -453,6 +468,7 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
                 stackable: stackableTrigger || Boolean(maxStacks),
                 maxStacks,
                 requiresAmbush: requiresAmbush || /伏兵/.test(match[0]) || dynamicInfo?.dynamicType === 'per_ambush_deployed',
+                benefitsOnlySelf: benefitsOnlySelf || undefined,  // 敵デバフだが自分だけが恩恵を受ける
                 confidence: detectedTarget.confidence,
                 inferenceReason: detectedTarget.inferenceReason,
                 ...dynamicInfo,
