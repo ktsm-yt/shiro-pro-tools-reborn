@@ -38,16 +38,17 @@ export const patterns: ParsedPattern[] = [
     { stat: 'inspire', mode: 'percent_max', regex: new RegExp(`自身の防御の(\\d+)${PCT}.*?加算`), inspireSourceStat: 'defense' },
 
     // 1. 攻撃系
-    // 時間経過・条件付き攻撃上昇（上限値）: 「攻撃が徐々に上昇(上限○%)」「大破数に応じて攻撃が上昇(上限○倍)」
+    // 時間経過・条件付き攻撃上昇（上限値・最大値）: 「攻撃が徐々に上昇(上限○%)」「攻撃が12%ずつ上昇(最大120%)」
     // 注: 「攻撃が○倍のダメージを与え」は give_damage パターンで先にマッチされる
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が)?.*?上昇.*?[（(]上限\\s*(\\d+)${PCT}[）)]`), note: '時間/条件依存（最大値）' },
-    { stat: 'attack', mode: 'percent_max', regex: /攻撃(?:力)?(?:が)?.*?上昇.*?[（(]上限\s*(\d+(?:\.\d+)?)倍[）)]/, valueTransform: asPercentFromMultiplier, unit: '×', note: '時間/条件依存（最大値）' },
+    // 注: 「攻撃対象/攻撃速度/攻撃後」で始まる場合は別パターンなので除外
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?!対象|速度|後)(?:が)?.*?上昇.*?[（(](?:上限|最大)\\s*(\\d+)${PCT}[）)]`), target: 'self', note: '時間/条件依存（最大値）' },
+    { stat: 'attack', mode: 'percent_max', regex: /攻撃(?:力)?(?!対象|速度|後)(?:が)?.*?上昇.*?[（(](?:上限|最大)\s*(\d+(?:\.\d+)?)倍[）)]/, valueTransform: asPercentFromMultiplier, unit: '×', target: 'self', note: '時間/条件依存（最大値）' },
     // 「攻撃と防御1.2倍」「攻撃が1.2倍」のような複合パターン（展開後に「が」が入る）
     // 注: 鼓舞パターン「自身の攻撃と防御の○%...加算」と重複しないよう、(?<!自身の)で除外
     // 注: 「攻撃が○倍のダメージを与え」は give_damage なので (?!のダメージ) で除外
     { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:が|を)?(?:と[^0-9]+)?(\\d+(?:\\.\\d+)?)倍(?!のダメージ)`), unit: '×', valueTransform: asPercentFromMultiplier },
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
-    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`(?<!自身の)攻撃(?:力)?(?:と[^0-9]+)?(\\d+)${PCT}(?!ずつ|低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
+    { stat: 'attack', mode: 'percent_max', regex: new RegExp(`攻撃(?:力)?(?:が|を|\\+)?\\s*(\\d+)${PCT}(?!ずつ|低下|減少|ダウン)(?:上昇|増加|アップ)?`) },
     { stat: 'attack', mode: 'flat_sum', regex: /攻撃(?:力)?(?:が|を|\+)\s*(\d+)(?![0-9]*[%％.倍])(?:上昇|増加|アップ)?/ },  // が|を|+ 必須、小数点・倍も除外
     { stat: 'enemy_attack', mode: 'percent_max', regex: new RegExp(`敵の?攻撃(?:力)?(?:と[^0-9]*)?(?:が|を)?\\s*(\\d+)${PCT}(?:低下|減少|ダウン)`) },
     { stat: 'enemy_attack', mode: 'flat_sum', regex: /敵の?攻撃(?:力)?(?:と[^0-9]*)?(?:が|を)?\s*(\d+)(?![%％.])(?:低下|減少|ダウン)/ },
@@ -75,8 +76,9 @@ export const patterns: ParsedPattern[] = [
     // 注: 「攻撃の○倍のダメージ」は除外するために、直前に「与える」か「与」が必須、または「攻撃の」を否定する
     { stat: 'give_damage', mode: 'percent_max', regex: /(?<!攻撃の)与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`(?<!攻撃の)与えるダメージ(?:が|を)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
-    // HP依存ダメージ: 「敵の耐久が低い程与えるダメージ上昇(最大○倍)」
+    // HP依存ダメージ: 「敵の耐久が低い程与えるダメージ上昇(最大○倍)」「攻撃対象の耐久が高い程与えるダメージ上昇(最大○倍)」
     { stat: 'give_damage', mode: 'percent_max', regex: /敵の耐久が低い(?:程|ほど).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: 'HP依存（最大値）' },
+    { stat: 'give_damage', mode: 'percent_max', regex: /攻撃対象の耐久が高い(?:程|ほど).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: 'HP依存（最大値）' },
     // Phase 4: damage_dealt（加算）- 「与ダメ」（略称）
     { stat: 'damage_dealt', mode: 'percent_max', regex: /(?<!与)与ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`(?<!与)与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)`) },
@@ -86,7 +88,7 @@ export const patterns: ParsedPattern[] = [
     { stat: 'enemy_damage_dealt', mode: 'percent_max', regex: new RegExp(`敵の?.*?与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?:低下|減少|ダウン)`) },  // 敵の与ダメ低下（防御貢献）
     { stat: 'damage_recovery', mode: 'percent_max', regex: new RegExp(`与ダメの?(\\d+)${PCT}.*?回復`) },
     { stat: 'critical_bonus', mode: 'absolute_set', regex: new RegExp(`直撃ボーナスが(\\d+)${PCT}に上昇`) },
-    { stat: 'critical_bonus', mode: 'percent_max', regex: new RegExp(`直撃ボーナスが(\\d+)${PCT}(?:上昇)?`) },  // 「直撃ボーナスが120%」「直撃ボーナスが120%上昇」両対応
+    { stat: 'critical_bonus', mode: 'percent_max', regex: new RegExp(`直撃ボーナスが(\\d+)${PCT}(?!に上昇)(?:上昇)?`) },  // 「直撃ボーナスが120%」「直撃ボーナスが120%上昇」両対応（「○%に上昇」は absolute_set で処理）
 
     // 4. 射程・対象数系
     { stat: 'enemy_range', mode: 'percent_max', regex: new RegExp(`射程(?:が|を)?\\s*(\\d+)${PCT}?(?:低下|減少|ダウン)`) },
@@ -119,7 +121,7 @@ export const patterns: ParsedPattern[] = [
     // 気(ノビ)（「敵」を含まない：味方の撃破気増加）
     // "射程内の城娘の撃破気が1増加" "撃破獲得気2増加"
     { stat: 'cost_defeat_bonus', mode: 'flat_sum', regex: /(?:城娘|味方|自身)の撃破気(?:が)?\s*[+]?(\d+)/ },
-    { stat: 'cost_defeat_bonus', mode: 'flat_sum', regex: /撃破(?:獲得)?気(?:が)?\s*[+]?(\d+)(?!.*敵)/ },
+    { stat: 'cost_defeat_bonus', mode: 'flat_sum', regex: /(?<!敵(?:の)?)撃破(?:獲得)?気(?:が)?\s*[+]?(\d+)/ },
     // 徐々気（複数の表記揺れ対応）- 全てスタック（加算）する
     // "徐々に気が◯増加" "10秒ごとに◯増加" "巨大化するごとに" "時間経過で気が徐々に増加"
     // 時間経過で気が徐々に増加 = 5秒毎に2増加（数値なしの場合）

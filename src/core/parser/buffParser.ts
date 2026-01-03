@@ -162,6 +162,26 @@ function expandParallelStats(line: string): string[] {
         return [line];
     }
 
+    // 「攻撃N%とM(効果重複)」のパターンを検出・展開
+    // 例: "攻撃5%と70(効果重複)" → ["攻撃5%(効果重複)", "攻撃+70"]
+    // 効果重複は%部分のみに引き継ぐ
+    const percentAndFlatPattern = /(攻撃|防御|射程)(\d+)[%％]と(\d+)([（(]効果重複[）)])?/;
+    const percentAndFlatMatch = line.match(percentAndFlatPattern);
+    if (percentAndFlatMatch) {
+        const stat = percentAndFlatMatch[1];
+        const percent = percentAndFlatMatch[2];
+        const flat = percentAndFlatMatch[3];
+        const duplicate = percentAndFlatMatch[4] || ''; // 効果重複マーカー
+        const matchStart = line.indexOf(percentAndFlatMatch[0]);
+        const matchEnd = matchStart + percentAndFlatMatch[0].length;
+        const remainder = line.slice(matchEnd);
+        const prefix = line.slice(0, matchStart);
+        return [
+            `${prefix}${stat}${percent}%${duplicate}${remainder}`,  // 効果重複は%のみ
+            `${prefix}${stat}+${flat}${remainder}`                   // 固定値は効果重複なし
+        ];
+    }
+
     // 並列パターンの検出
     // 注意: 長いパターン（攻撃速度、移動速度、与ダメージ）を先に配置すること
     const statPattern = '与ダメ(?:ージ)?|被ダメ(?:ージ)?|攻撃速度|移動速度|攻撃(?:力)?|防御(?:力)?|射程|回復|耐久';
@@ -328,6 +348,9 @@ export function parseSkillLine(line: string): ParsedBuff[] {
     // 前処理: 全角→半角、表記揺れ正規化
     const preprocessed = preprocessText(line);
 
+    // 効果重複の検出は文分割前に行う（「攻撃が50%上昇。効果重複」のようなパターン対応）
+    const hasDuplicateMarker = /効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/.test(preprocessed);
+
     // 文ごとに分割（。や｡で区切る）
     const sentences = preprocessed.split(/[。｡]/);
 
@@ -348,7 +371,7 @@ export function parseSkillLine(line: string): ParsedBuff[] {
             const expandedLines = expandParallelStats(segment);
 
             for (const expandedLine of expandedLines) {
-                const results = parseSkillLineSingle(expandedLine, segment, sentenceContext);
+                const results = parseSkillLineSingle(expandedLine, segment, sentenceContext, hasDuplicateMarker);
                 allResults.push(...results);
             }
         }
@@ -372,14 +395,18 @@ export function parseSkillLine(line: string): ParsedBuff[] {
     return Array.from(unique.values());
 }
 
-function parseSkillLineSingle(line: string, originalLine: string, sentenceContext: SentenceContext = { conditionTags: [], target: null, isSelfOnly: false }): ParsedBuff[] {
+function parseSkillLineSingle(line: string, originalLine: string, sentenceContext: SentenceContext = { conditionTags: [], target: null, isSelfOnly: false }, hasDuplicateMarker = false): ParsedBuff[] {
     const results: ParsedBuff[] = [];
     const seen = new Set<string>();
     const detectedTarget = detectTarget(line);
-    // 効果重複の位置を検出（その位置より前のバフにのみ適用）
+    // 効果重複の検出（展開後の行でチェック）
     // 「割合重複」も同じく効果重複として扱う
-    const duplicateMatch = originalLine.match(/効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/);
-    const duplicatePosition = duplicateMatch ? originalLine.indexOf(duplicateMatch[0]) : -1;
+    // 展開された line から検出（「攻撃5%と70(効果重複)」→「攻撃+70」では検出されない）
+    const duplicateMatch = line.match(/効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/);
+    const duplicatePosition = duplicateMatch ? line.indexOf(duplicateMatch[0]) : -1;
+    // 元のセグメントに効果重複があったが、展開で除去された場合は hasDuplicateMarker を無効化
+    const originalHadDuplicate = /効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/.test(originalLine);
+    const effectiveHasDuplicateMarker = originalHadDuplicate ? duplicatePosition >= 0 : hasDuplicateMarker;
     const isExplicitlyNonDuplicate = /同種効果の重複無し|重複不可/.test(originalLine);
     const nonStacking = /重複なし/.test(originalLine) || isExplicitlyNonDuplicate;
     const stackPenaltyMatch = originalLine.match(/重複時効果(\d+)%減少/);
@@ -444,11 +471,23 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
             const dynamicInfo = detectDynamicBuff(line, value);
 
             // 効果重複はその位置より前のバフにのみ適用
+            // hasDuplicateMarker: 文分割前に「効果重複」が検出された場合（別の文にある場合も対応）
             const buffEndPosition = match.index + match[0].length;
-            const isDuplicate = duplicatePosition >= 0 && buffEndPosition <= duplicatePosition;
+            const isDuplicateInSentence = duplicatePosition >= 0 && buffEndPosition <= duplicatePosition;
+            const isDuplicate = isDuplicateInSentence || (effectiveHasDuplicateMarker && duplicatePosition < 0);
+
+            // 効果重複バフ（攻撃・防御・射程）は独立した effect_duplicate_* stat として出力
+            const duplicateStatMap: Record<string, string> = {
+                'attack': 'effect_duplicate_attack',
+                'defense': 'effect_duplicate_defense',
+                'range': 'effect_duplicate_range',
+            };
+            const effectiveStat = (isDuplicate && p.stat in duplicateStatMap)
+                ? duplicateStatMap[p.stat] as typeof p.stat
+                : p.stat;
 
             const base: ParsedBuff = {
-                stat: p.stat,
+                stat: effectiveStat,
                 mode: p.mode,
                 target: parsedTarget,
                 value,

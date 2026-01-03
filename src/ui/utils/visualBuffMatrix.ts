@@ -59,6 +59,7 @@ export const VISUAL_STAT_KEYS: Stat[] = [
   'strategy_cooldown',
   // 攻撃系
   'attack',
+  'effect_duplicate_attack',  // 攻撃効果重複（Phase 1乗算）
   'damage_dealt',
   'give_damage',
   'enemy_damage_taken', // 敵の被ダメ↑（攻撃貢献）
@@ -68,11 +69,13 @@ export const VISUAL_STAT_KEYS: Stat[] = [
   'enemy_defense_ignore_complete',
   // 射程系
   'range',
+  'effect_duplicate_range',  // 射程効果重複
   'target_count',
   'attack_count',
   'enemy_range',
   // 防御系
   'defense',
+  'effect_duplicate_defense',  // 防御効果重複
   'damage_taken',       // 自分の被ダメ軽減（防御）
   'enemy_attack',
   'enemy_damage_dealt',

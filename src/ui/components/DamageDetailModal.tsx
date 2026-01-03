@@ -243,7 +243,13 @@ function PhaseDetail({
                 <div>
                     <div className="text-cyan-400 font-medium mb-1">特殊攻撃</div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
-                        <span>倍率</span><span className="text-right">×{breakdown.specialAttack.multiplier}</span>
+                        <span>基本倍率</span><span className="text-right">×{breakdown.specialAttack.multiplier}</span>
+                        {breakdown.specialAttack.stackMultiplier && (
+                            <>
+                                <span>スタック倍率</span><span className="text-right text-yellow-400">×{breakdown.specialAttack.stackMultiplier}</span>
+                                <span>実効倍率</span><span className="text-right text-cyan-300">×{breakdown.specialAttack.effectiveMultiplier}</span>
+                            </>
+                        )}
                         {breakdown.specialAttack.hits > 1 && (
                             <>
                                 <span>連撃数</span><span className="text-right text-cyan-300">{breakdown.specialAttack.hits}連撃</span>

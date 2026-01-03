@@ -118,7 +118,9 @@ export function CompactCharacterCard({
                             <span className="text-sm font-semibold text-pink-400">{fmt(result.specialAttackDamage)}</span>
                             {result.breakdown?.specialAttack && (
                                 <span className="text-[10px] text-gray-600">
-                                    (×{result.breakdown.specialAttack.multiplier}
+                                    (×{result.breakdown.specialAttack.stackMultiplier
+                                        ? `${result.breakdown.specialAttack.multiplier}×${result.breakdown.specialAttack.stackMultiplier}=${result.breakdown.specialAttack.effectiveMultiplier}`
+                                        : result.breakdown.specialAttack.multiplier}
                                     {result.breakdown.specialAttack.hits > 1 && ` ×${result.breakdown.specialAttack.hits}連`}
                                     {result.breakdown.specialAttack.defenseIgnore && ' 防無'})
                                 </span>
