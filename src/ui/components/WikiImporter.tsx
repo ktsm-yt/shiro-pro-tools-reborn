@@ -12,13 +12,21 @@ interface Props {
 
 type InputMode = 'url' | 'html';
 
+interface ParseResult {
+    url: string;
+    character: Character | null;
+    error?: string;
+    selected: boolean;
+}
+
 export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImported }) => {
     const [inputMode, setInputMode] = useState<InputMode>('url');
     const [urlInput, setUrlInput] = useState('');
     const [htmlInput, setHtmlInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [previewCharacter, setPreviewCharacter] = useState<Character | null>(null);
+    const [parseResults, setParseResults] = useState<ParseResult[]>([]);
+    const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
     const [showDebug, setShowDebug] = useState(false);
     const manualAttributeOptions = ['平', '山', '水', '平山', '地獄', '架空', '無属性'];
 
@@ -26,7 +34,8 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
         setUrlInput('');
         setHtmlInput('');
         setError(null);
-        setPreviewCharacter(null);
+        setParseResults([]);
+        setExpandedIndex(null);
         onClose();
     };
 
@@ -41,27 +50,33 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
         return () => window.removeEventListener('keydown', listener);
     }, [isOpen]);
 
-    const toggleBuff = (kind: 'skills' | 'strategies', id: string) => {
-        setPreviewCharacter(prev => {
-            if (!prev) return prev;
-            const cloned = { ...prev } as Character;
+    const toggleBuff = (resultIndex: number, kind: 'skills' | 'strategies', id: string) => {
+        setParseResults(prev => prev.map((result, i) => {
+            if (i !== resultIndex || !result.character) return result;
+            const cloned = { ...result.character } as Character;
             const list = cloned[kind] || [];
             cloned[kind] = list.map(b => b.id === id ? { ...b, isActive: !b.isActive } : b) as any;
-            return cloned;
-        });
+            return { ...result, character: cloned };
+        }));
     };
 
-    const toggleAttribute = (attr: string) => {
-        setPreviewCharacter(prev => {
-            if (!prev) return prev;
-            const current = new Set(prev.attributes ?? []);
+    const toggleAttribute = (resultIndex: number, attr: string) => {
+        setParseResults(prev => prev.map((result, i) => {
+            if (i !== resultIndex || !result.character) return result;
+            const current = new Set(result.character.attributes ?? []);
             if (current.has(attr)) {
                 current.delete(attr);
             } else {
                 current.add(attr);
             }
-            return { ...prev, attributes: Array.from(current) };
-        });
+            return { ...result, character: { ...result.character, attributes: Array.from(current) } };
+        }));
+    };
+
+    const toggleSelected = (resultIndex: number) => {
+        setParseResults(prev => prev.map((result, i) =>
+            i === resultIndex ? { ...result, selected: !result.selected } : result
+        ));
     };
 
     if (!isOpen) return null;
@@ -69,38 +84,64 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     const handleImport = async () => {
         setError(null);
         setIsLoading(true);
-        setPreviewCharacter(null);
+        setParseResults([]);
+        setExpandedIndex(null);
 
         try {
-            let fetchResult;
-
             if (inputMode === 'url') {
-                if (!urlInput.trim()) {
+                // 改行で分割して複数URLを処理
+                const urls = urlInput
+                    .split('\n')
+                    .map(u => u.trim())
+                    .filter(u => u.length > 0);
+
+                if (urls.length === 0) {
                     setError('URLを入力してください');
                     setIsLoading(false);
                     return;
                 }
-                fetchResult = await fetchWikiPage(urlInput);
+
+                // 並列で全URLを処理
+                const results = await Promise.all(
+                    urls.map(async (url): Promise<ParseResult> => {
+                        try {
+                            const fetchResult = await fetchWikiPage(url);
+                            if (!fetchResult.success || !fetchResult.data) {
+                                return { url, character: null, error: fetchResult.error || '取得失敗', selected: false };
+                            }
+                            const rawData = parseWikiHtml(fetchResult.data, url);
+                            const character = analyzeCharacter(rawData);
+                            return { url, character, selected: true };
+                        } catch (err) {
+                            return { url, character: null, error: err instanceof Error ? err.message : '解析エラー', selected: false };
+                        }
+                    })
+                );
+
+                setParseResults(results);
+
+                // 全て失敗した場合のみエラー表示
+                const successCount = results.filter(r => r.character).length;
+                if (successCount === 0) {
+                    setError('全てのURLの解析に失敗しました');
+                }
             } else {
+                // HTML直接入力は従来通り1件のみ
                 if (!htmlInput.trim()) {
                     setError('HTMLソースを入力してください');
                     setIsLoading(false);
                     return;
                 }
-                fetchResult = parseDirectHtml(htmlInput);
+                const fetchResult = parseDirectHtml(htmlInput);
+                if (!fetchResult.success || !fetchResult.data) {
+                    setError(fetchResult.error || 'データの取得に失敗しました');
+                    setIsLoading(false);
+                    return;
+                }
+                const rawData = parseWikiHtml(fetchResult.data, 'direct-input');
+                const character = analyzeCharacter(rawData);
+                setParseResults([{ url: 'direct-input', character, selected: true }]);
             }
-
-            if (!fetchResult.success || !fetchResult.data) {
-                setError(fetchResult.error || 'データの取得に失敗しました');
-                setIsLoading(false);
-                return;
-            }
-
-            // パースしてキャラクター情報を抽出
-            const rawData = parseWikiHtml(fetchResult.data, urlInput || 'direct-input');
-            const character = analyzeCharacter(rawData);
-
-            setPreviewCharacter(character);
         } catch (err) {
             setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
         } finally {
@@ -109,11 +150,21 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     };
 
     const handleRegister = () => {
-        if (previewCharacter) {
-            onCharacterImported(previewCharacter);
-            handleClose();
-        }
+        const selectedCharacters = parseResults
+            .filter(r => r.selected && r.character)
+            .map(r => r.character!);
+
+        if (selectedCharacters.length === 0) return;
+
+        // 選択されたキャラクターを順次登録
+        selectedCharacters.forEach(character => {
+            onCharacterImported(character);
+        });
+        handleClose();
     };
+
+    const selectedCount = parseResults.filter(r => r.selected && r.character).length;
+    const successCount = parseResults.filter(r => r.character).length;
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -157,17 +208,17 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                     {inputMode === 'url' && (
                         <div className="space-y-3">
                             <label className="block text-sm font-medium text-gray-300">
-                                WikiページのURL
+                                WikiページのURL（複数可：改行区切り）
                             </label>
-                            <input
-                                type="text"
+                            <textarea
                                 value={urlInput}
                                 onChange={(e) => setUrlInput(e.target.value)}
-                                placeholder="https://scre.swiki.jp/index.php?江戸城"
-                                className="w-full px-3 py-2 bg-[#0b101b] border border-[#1f2a3d] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/60 text-gray-100 placeholder:text-gray-500"
+                                placeholder={`https://scre.swiki.jp/index.php?江戸城\nhttps://scre.swiki.jp/index.php?大坂城\nhttps://scre.swiki.jp/index.php?姫路城`}
+                                rows={5}
+                                className="w-full px-3 py-2 bg-[#0b101b] border border-[#1f2a3d] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/60 text-gray-100 placeholder:text-gray-500 font-mono text-sm"
                             />
                             <p className="text-xs text-gray-500">
-                                例: https://scre.swiki.jp/index.php?キャラ名
+                                1行に1つのURLを入力してください（複数キャラを一括でインポートできます）
                             </p>
                         </div>
                     )}
@@ -207,13 +258,18 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                         </div>
                     )}
 
-                    {/* プレビュー */}
-                    {previewCharacter && (
+                    {/* 解析結果一覧 */}
+                    {parseResults.length > 0 && (
                         <div className="mt-6 space-y-4">
-                            <div className="border-t pt-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h3 className="text-lg font-bold">プレビュー</h3>
-                                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                            <div className="border-t border-[#1f2a3d] pt-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-lg font-bold">
+                                        解析結果
+                                        <span className="ml-2 text-sm font-normal text-gray-400">
+                                            ({successCount}件成功 / {parseResults.length}件中)
+                                        </span>
+                                    </h3>
+                                    <label className="flex items-center gap-2 text-sm text-gray-400">
                                         <input
                                             type="checkbox"
                                             checked={showDebug}
@@ -222,192 +278,186 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                         デバッグ表示
                                     </label>
                                 </div>
-                                <div className="bg-[#111a2d] p-4 rounded-lg border border-[#1f2a3d] flex flex-col md:flex-row gap-4">
-                                    <div className="space-y-2 flex-1">
-                                        <div>
-                                            <span className="text-sm text-gray-400">名前:</span>{' '}
-                                            <strong>
-                                                {previewCharacter.period ? `［${previewCharacter.period}］` : ''}
-                                                {previewCharacter.name}
-                                            </strong>
-                                        </div>
-                                        <div>
-                                            <span className="text-sm text-gray-400">武器種:</span>{' '}
-                                            {previewCharacter.weapon}
-                                        </div>
-                                        <div>
-                                            <span className="text-sm text-gray-400">属性:</span>{' '}
-                                            {previewCharacter.attributes.join(', ')}
-                                        </div>
-                                        <div>
-                                            <details className="mt-1 text-xs">
-                                                <summary className="cursor-pointer text-gray-400 hover:text-gray-200">
-                                                    属性補正（手動）
-                                                </summary>
-                                                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                                                    {manualAttributeOptions.map(attr => {
-                                                        const checked = previewCharacter.attributes.includes(attr);
-                                                        return (
-                                                            <label key={attr} className="inline-flex items-center gap-1 text-gray-200">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={checked}
-                                                                    onChange={() => toggleAttribute(attr)}
-                                                                />
-                                                                {attr}
-                                                            </label>
-                                                        );
-                                                    })}
+
+                                {/* キャラクター一覧 */}
+                                <div className="space-y-2">
+                                    {parseResults.map((result, idx) => (
+                                        <div
+                                            key={idx}
+                                            className={`bg-[#111a2d] rounded-lg border ${result.character
+                                                ? result.selected ? 'border-green-600/50' : 'border-[#1f2a3d]'
+                                                : 'border-red-800/50'
+                                                }`}
+                                        >
+                                            {/* ヘッダー行 */}
+                                            <div
+                                                className="flex items-center gap-3 p-3 cursor-pointer hover:bg-[#1a2540]"
+                                                onClick={() => setExpandedIndex(expandedIndex === idx ? null : idx)}
+                                            >
+                                                {result.character ? (
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={result.selected}
+                                                        onChange={(e) => {
+                                                            e.stopPropagation();
+                                                            toggleSelected(idx);
+                                                        }}
+                                                        className="w-4 h-4"
+                                                    />
+                                                ) : (
+                                                    <span className="w-4 h-4 text-red-500 text-center">✗</span>
+                                                )}
+
+                                                {result.character?.imageUrl && (
+                                                    <img
+                                                        src={result.character.imageUrl}
+                                                        alt=""
+                                                        className="w-10 h-10 object-cover rounded border border-[#1f2a3d]"
+                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                    />
+                                                )}
+
+                                                <div className="flex-1 min-w-0">
+                                                    {result.character ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold truncate">
+                                                                {result.character.period ? `［${result.character.period}］` : ''}
+                                                                {result.character.name}
+                                                            </span>
+                                                            <span className="text-xs text-gray-500">{result.character.weapon}</span>
+                                                            <span className="text-xs text-gray-500">
+                                                                攻{result.character.baseStats.attack} / 防{result.character.baseStats.defense}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-red-400 text-sm truncate">
+                                                            {result.error || '解析エラー'}
+                                                        </div>
+                                                    )}
+                                                    <div className="text-xs text-gray-500 truncate">{result.url}</div>
                                                 </div>
-                                                <p className="text-[11px] text-gray-500 mt-1">
-                                                    Wikiから取得できない属性はここで追加してください
-                                                </p>
-                                            </details>
-                                        </div>
-                                        <div>
-                                            <span className="text-sm text-gray-400">ステータス:</span>
-                                            <ul className="ml-4 text-sm text-gray-100">
-                                                <li>攻撃: {previewCharacter.baseStats.attack ?? 'N/A'}</li>
-                                                <li>防御: {previewCharacter.baseStats.defense ?? 'N/A'}</li>
-                                                <li>射程: {previewCharacter.baseStats.range ?? 'N/A'}</li>
-                                                <li>再配置短縮: {previewCharacter.baseStats.cooldown ?? 'N/A'}</li>
-                                                <li>コスト: {previewCharacter.baseStats.cost ?? 'N/A'}</li>
-                                            </ul>
-                                        </div>
-                                        <div>
-                                            <span className="text-sm text-gray-400">特技テキスト数:</span>{' '}
-                                            {previewCharacter.rawSkillTexts?.length ?? 0}
-                                        </div>
-                                        <div>
-                                            <span className="text-sm text-gray-400">計略テキスト数:</span>{' '}
-                                            {previewCharacter.rawStrategyTexts?.length ?? 0}
-                                        </div>
-                                    </div>
-                                    {previewCharacter.imageUrl && (
-                                        <div className="shrink-0">
-                                            <div className="w-32 h-32 md:w-48 md:h-full relative bg-gray-800 rounded-lg overflow-hidden border border-[#1f2a3d]">
-                                                <img
-                                                    src={previewCharacter.imageUrl}
-                                                    alt={previewCharacter.name}
-                                                    className="w-full h-full object-contain"
-                                                    onError={(e) => {
-                                                        (e.target as HTMLImageElement).style.display = 'none';
-                                                    }}
-                                                />
+
+                                                <span className="text-gray-500 text-sm">
+                                                    {expandedIndex === idx ? '▲' : '▼'}
+                                                </span>
                                             </div>
+
+                                            {/* 展開時の詳細 */}
+                                            {expandedIndex === idx && result.character && (
+                                                <div className="border-t border-[#1f2a3d] p-4 space-y-3">
+                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                                        <div>
+                                                            <span className="text-gray-400">属性:</span>{' '}
+                                                            {result.character.attributes.join(', ') || 'なし'}
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-gray-400">射程:</span>{' '}
+                                                            {result.character.baseStats.range ?? 'N/A'}
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-gray-400">特技:</span>{' '}
+                                                            {result.character.skills.length}件
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-gray-400">計略:</span>{' '}
+                                                            {result.character.strategies.length}件
+                                                        </div>
+                                                    </div>
+
+                                                    {/* 属性手動補正 */}
+                                                    <details className="text-xs">
+                                                        <summary className="cursor-pointer text-gray-400 hover:text-gray-200">
+                                                            属性補正（手動）
+                                                        </summary>
+                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                            {manualAttributeOptions.map(attr => (
+                                                                <label key={attr} className="inline-flex items-center gap-1 text-gray-200">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={result.character!.attributes.includes(attr)}
+                                                                        onChange={() => toggleAttribute(idx, attr)}
+                                                                    />
+                                                                    {attr}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </details>
+
+                                                    {/* デバッグ情報 */}
+                                                    {showDebug && (
+                                                        <div className="bg-[#0b101b] border border-[#1f2a3d] rounded p-3 text-xs space-y-2">
+                                                            <div>
+                                                                <strong className="text-gray-300">特技テキスト:</strong>
+                                                                <ul className="list-disc list-inside text-gray-400 mt-1">
+                                                                    {(result.character.rawSkillTexts ?? []).map((t, i) => (
+                                                                        <li key={i}>{t}</li>
+                                                                    ))}
+                                                                    {(result.character.rawSkillTexts ?? []).length === 0 && <li>なし</li>}
+                                                                </ul>
+                                                            </div>
+                                                            <div>
+                                                                <strong className="text-gray-300">計略テキスト:</strong>
+                                                                <ul className="list-disc list-inside text-gray-400 mt-1">
+                                                                    {(result.character.rawStrategyTexts ?? []).map((t, i) => (
+                                                                        <li key={i}>{t}</li>
+                                                                    ))}
+                                                                    {(result.character.rawStrategyTexts ?? []).length === 0 && <li>なし</li>}
+                                                                </ul>
+                                                            </div>
+                                                            <div>
+                                                                <strong className="text-gray-300">解析済みバフ:</strong>
+                                                                <div className="overflow-x-auto mt-1">
+                                                                    <table className="min-w-full border border-[#1f2a3d]">
+                                                                        <thead className="bg-[#111a2d]">
+                                                                            <tr>
+                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">種別</th>
+                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">stat</th>
+                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">mode</th>
+                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">value</th>
+                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">target</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {result.character.skills.map((b, i) => (
+                                                                                <tr key={`s-${i}`} className="border-t border-[#1f2a3d]">
+                                                                                    <td className="px-2 py-1">特技</td>
+                                                                                    <td className="px-2 py-1">{b.stat}</td>
+                                                                                    <td className="px-2 py-1">{b.mode}</td>
+                                                                                    <td className="px-2 py-1">{b.value}</td>
+                                                                                    <td className="px-2 py-1">{b.target}</td>
+                                                                                </tr>
+                                                                            ))}
+                                                                            {result.character.strategies.map((b, i) => (
+                                                                                <tr key={`st-${i}`} className="border-t border-[#1f2a3d]">
+                                                                                    <td className="px-2 py-1">計略</td>
+                                                                                    <td className="px-2 py-1">{b.stat}</td>
+                                                                                    <td className="px-2 py-1">{b.mode}</td>
+                                                                                    <td className="px-2 py-1">{b.value}</td>
+                                                                                    <td className="px-2 py-1">{b.target}</td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
+                                    ))}
                                 </div>
-
-                                {showDebug && (
-                                    <div className="mt-4 bg-[#0b101b] border border-[#1f2a3d] rounded-lg p-4 text-sm space-y-3 text-gray-100">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div>
-                                                <h4 className="font-bold text-gray-100 mb-1">特技テキスト（採用）</h4>
-                                                <ul className="list-disc list-inside space-y-1 text-gray-200 text-xs">
-                                                    {(previewCharacter.rawSkillTexts ?? []).length === 0 && <li className="text-gray-500">なし</li>}
-                                                    {(previewCharacter.rawSkillTexts ?? []).map((t, i) => (
-                                                        <li key={`raw-skill-${i}`}>{t}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-100 mb-1">計略テキスト（採用）</h4>
-                                                <ul className="list-disc list-inside space-y-1 text-gray-200 text-xs">
-                                                    {(previewCharacter.rawStrategyTexts ?? []).length === 0 && <li className="text-gray-500">なし</li>}
-                                                    {(previewCharacter.rawStrategyTexts ?? []).map((t, i) => (
-                                                        <li key={`raw-strategy-${i}`}>{t}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-100 mb-1">特殊能力テキスト（採用）</h4>
-                                                <ul className="list-disc list-inside space-y-1 text-gray-200 text-xs">
-                                                    {(previewCharacter.rawSpecialTexts ?? []).length === 0 && <li className="text-gray-500">なし</li>}
-                                                    {(previewCharacter.rawSpecialTexts ?? []).map((t, i) => (
-                                                        <li key={`raw-special-${i}`}>{t}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <h4 className="font-bold text-gray-100 mb-1">解析済みバフ</h4>
-                                            <div className="overflow-x-auto text-xs">
-                                                <table className="min-w-full border border-[#1f2a3d]">
-                                                    <thead className="bg-[#111a2d]">
-                                                        <tr>
-                                                            <th className="px-2 py-1 border border-[#1f2a3d] text-gray-200">種別</th>
-                                                            <th className="px-2 py-1 border border-[#1f2a3d] text-gray-200">stat</th>
-                                                            <th className="px-2 py-1 border border-[#1f2a3d] text-gray-200">mode</th>
-                                                            <th className="px-2 py-1 border border-[#1f2a3d] text-gray-200">value</th>
-                                                            <th className="px-2 py-1 border border-[#1f2a3d] text-gray-200">target</th>
-                                                            <th className="px-2 py-1 border border-[#1f2a3d] text-gray-200">active</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {previewCharacter.skills.length === 0 && previewCharacter.strategies.length === 0 && (previewCharacter.specialAbilities ?? []).length === 0 && (
-                                                            <tr><td colSpan={6} className="text-center text-gray-500 py-2">なし</td></tr>
-                                                        )}
-                                                        {previewCharacter.skills.map((b, i) => (
-                                                            <tr key={`skill-buff-${b.id}`} className="border-t border-[#1f2a3d]">
-                                                                <td className="px-2 py-1 text-gray-100">特技#{i + 1}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.stat}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.mode}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.value}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.target}</td>
-                                                                <td className="px-2 py-1 text-center">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={b.isActive}
-                                                                        onChange={() => toggleBuff('skills', b.id)}
-                                                                    />
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                        {previewCharacter.strategies.map((b, i) => (
-                                                            <tr key={`strategy-buff-${b.id}`} className="border-t border-[#1f2a3d]">
-                                                                <td className="px-2 py-1 text-gray-100">計略#{i + 1}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.stat}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.mode}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.value}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.target}</td>
-                                                                <td className="px-2 py-1 text-center">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={b.isActive}
-                                                                        onChange={() => toggleBuff('strategies', b.id)}
-                                                                    />
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                        {(previewCharacter.specialAbilities ?? []).map((b, i) => (
-                                                            <tr key={`special-buff-${b.id}`} className="border-t border-[#1f2a3d] bg-purple-900/20">
-                                                                <td className="px-2 py-1 text-gray-100">特殊#{i + 1}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.stat}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.mode}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.value}</td>
-                                                                <td className="px-2 py-1 text-gray-100">{b.target}</td>
-                                                                <td className="px-2 py-1 text-center">
-                                                                    <input type="checkbox" checked={b.isActive} disabled />
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            <p className="text-[11px] text-gray-500 mt-1">※ 特技・計略・特殊能力すべて発動前提でON</p>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
 
                             {/* 登録ボタン */}
                             <button
                                 onClick={handleRegister}
-                                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors shadow-lg shadow-green-900/25"
+                                disabled={selectedCount === 0}
+                                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors shadow-lg shadow-green-900/25"
                             >
-                                編成に登録
+                                {selectedCount > 0
+                                    ? `${selectedCount}件を編成に登録`
+                                    : '登録するキャラを選択してください'}
                             </button>
                         </div>
                     )}
