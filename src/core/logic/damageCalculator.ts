@@ -167,6 +167,7 @@ function calculatePhase1(
     let duplicateBuffSum = 0;
     const flatBuffDetails: Array<{ value: number; condition: string }> = [];
 
+    // 攻撃バフの収集
     for (const buff of allBuffs) {
         if (buff.stat !== 'attack' || buff.isActive === false) continue;
         // 自身に適用されるバフ: target=self または target=range/all（自身も射程内に含む）
@@ -185,14 +186,8 @@ function calculatePhase1(
         const dynamicMultiplier = getDynamicBuffMultiplier(buff, environment, character);
 
         if (buff.mode === 'percent_max') {
-            // 割合バフには動的倍率を適用しない（最大値ルール）
-            if (buff.isDuplicate) {
-                // 効果重複バフは合算
-                duplicateBuffSum += buff.value;
-            } else {
-                // 通常バフは最大値
-                selfPercentBuff = Math.max(selfPercentBuff, buff.value);
-            }
+            // 通常バフは最大値ルール
+            selfPercentBuff = Math.max(selfPercentBuff, buff.value);
         } else if (buff.mode === 'flat_sum') {
             // 固定値バフには動的倍率を適用
             const effectiveValue = buff.value * dynamicMultiplier;
@@ -206,6 +201,19 @@ function calculatePhase1(
             }
             flatBuffDetails.push({ value: effectiveValue, condition });
         }
+    }
+
+    // 攻撃効果重複バフの収集（effect_duplicate_attack stat）
+    for (const buff of allBuffs) {
+        if (buff.stat !== 'effect_duplicate_attack' || buff.isActive === false) continue;
+        const appliesToSelf = buff.target === 'self' || buff.target === 'range' || buff.target === 'all';
+        if (!appliesToSelf) continue;
+        if (buff.conditionTags?.includes('exclude_self')) continue;
+        if (buff.conditionTags && buff.conditionTags.length > 0) {
+            if (!areConditionsSatisfied(buff.conditionTags, character)) continue;
+        }
+        // 効果重複バフは合算
+        duplicateBuffSum += buff.value;
     }
 
     // 射程→攻撃変換を適用
@@ -479,7 +487,14 @@ function calculatePhase2(
     // ベース直撃ボーナスは50%（1.5倍）
     // absolute_set: 「直撃ボーナスが300%に上昇」→ (100+300)/100 = 4.0倍
     // percent_max: 「直撃ボーナスが120%上昇」→ ベース50% + 120% = 170% = (100+170)/100 = 2.70倍
+    // 同種効果ルール: 複数の直撃ボーナスがある場合は最大値のみ適用
     const BASE_CRITICAL_BONUS = 50; // ベース直撃ボーナス 50%
+
+    interface CriticalBonusInfo {
+        multiplier: number;
+        conditionLabel: string;
+    }
+    const criticalBonusCandidates: CriticalBonusInfo[] = [];
 
     for (const buff of allBuffs) {
         if (buff.stat !== 'critical_bonus' || buff.isActive === false) continue;
@@ -510,12 +525,21 @@ function calculatePhase2(
             conditionLabel = `直撃${totalBonus}%`;
         }
 
-        damage *= criticalMultiplier;
-        multipliers.push({ type: '直撃ボーナス', value: criticalMultiplier });
+        criticalBonusCandidates.push({ multiplier: criticalMultiplier, conditionLabel });
+    }
+
+    // 最大値のみ適用（同種効果ルール）
+    if (criticalBonusCandidates.length > 0) {
+        const maxBonus = criticalBonusCandidates.reduce(
+            (max, b) => b.multiplier > max.multiplier ? b : max,
+            criticalBonusCandidates[0]
+        );
+        damage *= maxBonus.multiplier;
+        multipliers.push({ type: '直撃ボーナス', value: maxBonus.multiplier });
         multiplierDetails.push({
             type: '直撃ボーナス',
-            value: criticalMultiplier,
-            condition: conditionLabel,
+            value: maxBonus.multiplier,
+            condition: maxBonus.conditionLabel,
         });
     }
 
@@ -804,17 +828,23 @@ function calculateSpecialAttackDamage(
     defenseIgnore: boolean;
     cycleN: number;
     rangeMultiplier?: number;
+    stackMultiplier?: number;
+    effectiveMultiplier: number;
 } | undefined {
     const specialAttack = character.specialAttack;
     if (!specialAttack) return undefined;
 
-    const { multiplier, hits: rawHits, defenseIgnore, cycleN, rangeMultiplier } = specialAttack;
+    const { multiplier, hits: rawHits, defenseIgnore, cycleN, rangeMultiplier, stackMultiplier } = specialAttack;
     // 既存データとの互換性: hitsが未設定の場合は1（単発）
     const hits = rawHits ?? 1;
 
-    // 特殊攻撃ダメージ = Phase2ダメージ × 特殊攻撃倍率
+    // 実効倍率 = 基本倍率 × スタック倍率（全ストック消費時）
+    // 例: 7倍 × 3 = 21倍（大坂城の最大値）
+    const effectiveMultiplier = multiplier * (stackMultiplier ?? 1);
+
+    // 特殊攻撃ダメージ = Phase2ダメージ × 実効倍率
     // (Phase2時点で give_damage 等の乗算が適用済み)
-    let damage = phase2Damage * multiplier;
+    let damage = phase2Damage * effectiveMultiplier;
 
     // Phase 3: 防御力による減算（防御無視なら0）
     if (!defenseIgnore) {
@@ -851,7 +881,7 @@ function calculateSpecialAttackDamage(
     // 連撃数を適用（2連撃なら2倍のダメージ）
     const totalDamage = damage * hits;
 
-    return { damage: totalDamage, multiplier, hits, defenseIgnore, cycleN, rangeMultiplier };
+    return { damage: totalDamage, multiplier, hits, defenseIgnore, cycleN, rangeMultiplier, stackMultiplier, effectiveMultiplier };
 }
 
 // ========================================
@@ -1221,7 +1251,7 @@ export function calculateDamage(
     let specialAttackBreakdown: DamageBreakdown['specialAttack'] | undefined;
 
     if (specialAttackResult) {
-        const { damage: spDamage, multiplier, hits, defenseIgnore, cycleN, rangeMultiplier } = specialAttackResult;
+        const { damage: spDamage, multiplier, hits, defenseIgnore, cycleN, rangeMultiplier, stackMultiplier, effectiveMultiplier } = specialAttackResult;
 
         // サイクルDPS = ((N-1) * 通常ダメージ + 1 * 特殊攻撃ダメージ) / サイクル時間
         const normalDamage = phase5.damage;
@@ -1237,6 +1267,8 @@ export function calculateDamage(
             defenseIgnore,
             cycleN,
             rangeMultiplier,
+            stackMultiplier,
+            effectiveMultiplier,
             damage: spDamage,
             cycleDps,
         };
