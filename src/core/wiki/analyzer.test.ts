@@ -707,6 +707,21 @@ describe('気関連パターン', () => {
             value: 2,
         });
     });
+
+    // 攻撃N%とM展開テスト（ゴールデン・ハインド）
+    it('should expand "攻撃5%と70(効果重複)" to percent and flat buffs', () => {
+        const result = analyzeBuffText('攻撃5%と70(効果重複)');
+        expect(result).toHaveLength(2);
+        // 効果重複は%のみ
+        const percentBuff = result.find(b => b.stat === 'effect_duplicate_attack');
+        expect(percentBuff).toBeDefined();
+        expect(percentBuff?.value).toBe(5);
+        expect(percentBuff?.mode).toBe('percent_max');
+        // 固定値は通常attack
+        const flatBuff = result.find(b => b.stat === 'attack' && b.mode === 'flat_sum');
+        expect(flatBuff).toBeDefined();
+        expect(flatBuff?.value).toBe(70);
+    });
 });
 
 describe('伏兵配置（千賀地氏城など）', () => {
@@ -832,5 +847,42 @@ describe('abilityMode detection', () => {
         expect(character.specialAttack?.multiplier).toBe(6);
         expect(character.specialAttack?.hits).toBe(2);
         expect(character.specialAttack?.cycleN).toBe(3);
+    });
+});
+
+describe('specialAttack stackMultiplier', () => {
+    it('should detect stackMultiplier from "ダメージと攻撃上昇量が増加（最大3倍）" (暁星大坂城)', () => {
+        const raw: RawCharacterData = {
+            name: '［暁星］大坂城',
+            weapon: '杖',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 2500, defense: 100, range: 400 },
+            specialAttackTexts: [
+                'ストック1消費で攻撃の7倍ダメージを指定方向の敵に与え、射程内味方の攻撃が30秒間150上昇。特殊能力中はストックを全消費し、ダメージと攻撃上昇量が増加（最大3倍）。',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        expect(character.specialAttack).toBeDefined();
+        expect(character.specialAttack?.multiplier).toBe(7);
+        expect(character.specialAttack?.stackMultiplier).toBe(3);
+        // 最大ダメージ = 7 × 3 = 21倍
+    });
+
+    it('should not set stackMultiplier when not present', () => {
+        const raw: RawCharacterData = {
+            name: 'テスト城',
+            weapon: '刀',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 1000, defense: 100, range: 150 },
+            specialAttackTexts: [
+                '攻撃の6倍のダメージを与える',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        expect(character.specialAttack).toBeDefined();
+        expect(character.specialAttack?.multiplier).toBe(6);
+        expect(character.specialAttack?.stackMultiplier).toBeUndefined();
     });
 });

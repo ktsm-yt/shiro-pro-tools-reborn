@@ -27,6 +27,7 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
     key: 'offense', name: '攻撃系', icon: '⚔', stats: [
       { key: 'attack', name: '攻撃%', icon: '⚔' },
       { key: 'attack', name: '攻撃+', icon: '⚔', isFlat: true },
+      { key: 'effect_duplicate_attack', name: '効果重複', icon: '🔄' },
       { key: 'damage_dealt', name: '与ダメ↑', icon: '💥' },
       { key: 'give_damage', name: '与えるダメージ', icon: '✕' },
       { key: 'enemy_damage_taken', name: '被ダメ↑', icon: '🔥' },
@@ -40,6 +41,7 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
     key: 'range', name: '射程系', icon: '◎', stats: [
       { key: 'range', name: '射程%', icon: '◎' },
       { key: 'range', name: '射程+', icon: '◎', isFlat: true },
+      { key: 'effect_duplicate_range', name: '効果重複', icon: '🔄' },
       { key: 'target_count', name: '対象数', icon: '👥' },
       { key: 'attack_count', name: '攻撃回数', icon: '🔄' },
       { key: 'enemy_range', name: '敵射程↓', icon: '📉' },
@@ -49,6 +51,7 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
     key: 'defense', name: '防御系', icon: '🛡', stats: [
       { key: 'defense', name: '防御%', icon: '🛡' },
       { key: 'defense', name: '防御+', icon: '🛡', isFlat: true },
+      { key: 'effect_duplicate_defense', name: '効果重複', icon: '🔄' },
       { key: 'damage_taken', name: '被ダメ軽減', icon: '🔰' },
       { key: 'enemy_attack', name: '敵攻撃↓', icon: '🔻' },
       { key: 'enemy_damage_dealt', name: '与ダメ↓', icon: '📉' },
@@ -74,6 +77,7 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
 const PERCENT_STATS = new Set<Stat>([
   'attack', 'defense', 'range',
   'damage_dealt', 'give_damage', 'damage_taken', 'enemy_damage_taken', 'damage_recovery', 'critical_bonus',
+  'effect_duplicate_attack', 'effect_duplicate_defense', 'effect_duplicate_range',  // 効果重複
   'attack_speed', 'attack_gap',
   'strategy_cooldown', 'cost_giant',
   'enemy_defense', 'enemy_defense_ignore_percent', 'enemy_attack', 'enemy_movement', 'enemy_range',

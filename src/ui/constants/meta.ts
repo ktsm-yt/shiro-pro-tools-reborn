@@ -2,14 +2,15 @@ import type { Character } from '../../core/types';
 
 type AttributeKey = 'plain' | 'plain_mountain' | 'mountain' | 'water' | 'hell' | 'none';
 
-const ATTRIBUTE_KEYWORDS: Record<AttributeKey, string[]> = {
-  plain: ['平', 'plain'],
-  plain_mountain: ['平山', 'plain_mountain'],
-  mountain: ['山', 'mountain'],
-  water: ['水', 'water'],
-  hell: ['地獄', 'hell'],
-  none: ['無', 'none'],
-};
+// Order matters: more specific patterns (平山) must come before shorter ones (平, 山)
+const ATTRIBUTE_KEYWORDS: [AttributeKey, string[]][] = [
+  ['plain_mountain', ['平山', 'plain_mountain']],
+  ['plain', ['平', 'plain']],
+  ['mountain', ['山', 'mountain']],
+  ['water', ['水', 'water']],
+  ['hell', ['地獄', 'hell']],
+  ['none', ['無', 'none']],
+];
 
 export const ATTRIBUTE_META: Record<AttributeKey, { label: string; main: string; light: string; border: string; text: string; dot: string }> = {
   plain: { label: '平', main: 'bg-green-600', light: 'bg-green-500/15', border: 'border-green-500', text: 'text-green-300', dot: 'bg-green-400' },
@@ -53,7 +54,7 @@ const WEAPON_META: Record<string, { icon: string; name: string; range: 'melee' |
 export function resolveAttributeKey(attributeText?: string): AttributeKey {
   if (!attributeText) return 'none';
   const lowered = attributeText.toLowerCase();
-  for (const [key, candidates] of Object.entries(ATTRIBUTE_KEYWORDS) as [AttributeKey, string[]][]) {
+  for (const [key, candidates] of ATTRIBUTE_KEYWORDS) {
     if (candidates.some((c) => lowered.includes(c.toLowerCase()))) {
       return key;
     }

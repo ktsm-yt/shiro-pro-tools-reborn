@@ -23,7 +23,10 @@ export type DamageMultiplierStat =
     | 'give_damage'
     | 'damage_taken'
     | 'damage_recovery'
-    | 'critical_bonus';
+    | 'critical_bonus'
+    | 'effect_duplicate_attack'   // 攻撃効果重複（Phase 1乗算）
+    | 'effect_duplicate_defense'  // 防御効果重複
+    | 'effect_duplicate_range';   // 射程効果重複
 
 export type EnemyDebuffStat =
     | 'enemy_attack'
@@ -207,6 +210,7 @@ export interface Character {
         defenseIgnore: boolean;  // 防御無視
         cycleN: number;          // N回に1回発動（デフォルト: 3）
         rangeMultiplier?: number; // 射程倍率（例: 1.3 = 1.3倍の射程で）
+        stackMultiplier?: number; // スタック倍率（例: 3 = 全ストック消費で最大3倍）
     };
 
     // 射程→攻撃変換（[竜焔]仙台城など）
@@ -432,6 +436,8 @@ export interface DamageBreakdown {
         defenseIgnore: boolean;
         cycleN: number;
         rangeMultiplier?: number; // 射程倍率
+        stackMultiplier?: number; // スタック倍率（最大時）
+        effectiveMultiplier: number; // 実効倍率（multiplier × stackMultiplier）
         damage: number;          // 特殊攻撃の瞬間ダメージ（連撃込み）
         cycleDps: number;        // Nサイクル加重平均DPS
     };
