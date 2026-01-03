@@ -7,11 +7,13 @@ import { CharacterModal } from './ui/components/CharacterModal';
 import { WikiImporter } from './ui/components/WikiImporter';
 import { RightSidebar } from './ui/components/RightSidebar';
 import { DamageAnalysis } from './ui/components/DamageAnalysis';
+import { CompareListSelector } from './ui/components/CompareListSelector';
 import { buildVisualBuffMatrix } from './ui/utils/visualBuffMatrix';
 import { useEnvironmentSettings } from './ui/hooks/useEnvironmentSettings';
 import { useDamageCalculation } from './ui/hooks/useDamageCalculation';
 import { useCharacterStorage } from './ui/hooks/useCharacterStorage';
 import { useFormationStorage } from './ui/hooks/useFormationStorage';
+import { useCompareList } from './ui/hooks/useCompareList';
 import { getAttributeMeta, isRangedWeapon } from './ui/constants/meta';
 import { loadCharacters } from './core/storage';
 import { FormationSaveModal } from './ui/components/FormationSaveModal';
@@ -50,6 +52,9 @@ export default function App() {
 
   const loadMenuRef = useRef<HTMLDivElement | null>(null);
   const isSessionRestoredRef = useRef(false);
+
+  // Compare List for Analysis
+  const { compareIds, toggleCompare, clearCompareList } = useCompareList();
 
   // Persistence Hooks
   const { savedCharacters, addCharacter: saveCharacter, removeCharacter: deleteCharacterFromStorage, updateCharacter: updateCharacterInStorage } = useCharacterStorage();
@@ -147,7 +152,17 @@ export default function App() {
   }, [formation, mapConstraint]);
 
   // Damage Calculation
-  const { results, comparisons } = useDamageCalculation(activeChars, env);
+  const { results, comparisons, damageRanges } = useDamageCalculation(activeChars, env);
+
+  // Compare List Characters
+  const compareChars = useMemo(() => {
+    return compareIds
+      .map(id => savedCharacters.find(c => c.id === id))
+      .filter((c): c is Character => c !== undefined);
+  }, [compareIds, savedCharacters]);
+
+  // Compare List Damage Calculation
+  const { results: compareResults, comparisons: compareComparisons, damageRanges: compareDamageRanges } = useDamageCalculation(compareChars, env);
 
   // --- Handlers ---
 
@@ -261,20 +276,20 @@ export default function App() {
 
   // Tab Switcher Component
   const TabSwitcher = () => (
-    <div className="flex bg-gray-800 p-1 rounded-lg border border-gray-700">
+    <div className="inline-flex bg-gray-800 p-1 rounded-lg border border-gray-700">
       <button
         onClick={() => setActiveTab('matrix')}
-        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'matrix'
-          ? 'bg-white text-blue-600 shadow-sm'
+        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'matrix'
+          ? 'bg-white text-blue-600'
           : 'text-gray-400 hover:text-gray-200'
           }`}
       >
-        編成 & Matrix
+        Matrix
       </button>
       <button
         onClick={() => setActiveTab('analysis')}
-        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'analysis'
-          ? 'bg-white text-blue-600 shadow-sm'
+        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'analysis'
+          ? 'bg-white text-blue-600'
           : 'text-gray-400 hover:text-gray-200'
           }`}
       >
@@ -374,17 +389,15 @@ export default function App() {
 
       {/* Full Width Header */}
       <header className="px-4 py-2 border-b border-gray-800 bg-[#0f1626] flex flex-wrap items-center gap-3 shadow-sm z-20">
-        {/* Left: Title */}
-        <div className="flex items-center gap-4 shrink-0">
-          <div>
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">ShiroPro Tools Reborn</p>
-            <h1 className="text-lg font-bold text-white tracking-tight">
-              {activeTab === 'matrix' ? '編成 & バフマトリックス' : 'ダメージ計算 & 分析'}
-            </h1>
-          </div>
+        {/* Left: Title - same width as sidebar (w-56 = 14rem) */}
+        <div className="w-56 shrink-0 pl-2">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">ShiroPro Tools Reborn</p>
+          <h1 className="text-lg font-bold text-white tracking-tight">
+            {activeTab === 'matrix' ? '編成 & バフマトリックス' : 'ダメージ計算 & 分析'}
+          </h1>
         </div>
 
-        {/* Center: TabSwitcher */}
+        {/* TabSwitcher - aligned with main content area */}
         <div className="shrink-0">
           <TabSwitcher />
         </div>
@@ -635,7 +648,7 @@ export default function App() {
               {activeTab === 'matrix' && (
                 <>
                   <section>
-                    <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-8 gap-3">
                       {formation.slots.map((char, index) => (
                         <FormationSlot
                           key={index}
@@ -668,15 +681,25 @@ export default function App() {
               )}
 
               {activeTab === 'analysis' && (
-                <section className="h-full">
+                <section className="h-full overflow-y-auto">
+                  {/* キャラ選択UI */}
+                  <CompareListSelector
+                    allCharacters={savedCharacters}
+                    selectedIds={compareIds}
+                    onToggle={toggleCompare}
+                    onClear={clearCompareList}
+                  />
+
                   <DamageAnalysis
-                    characters={activeChars}
-                    results={results}
-                    comparisons={comparisons}
+                    characters={compareChars}
+                    results={compareResults}
+                    comparisons={compareComparisons}
+                    damageRanges={compareDamageRanges}
                     env={env}
                     onCharClick={onCharClick}
-                    onRemove={(id) => removeCharacter(id)}
+                    onRemove={toggleCompare}
                     onUpdateCharacter={handleUpdateCharacter}
+                    mode="compare"
                   />
                 </section>
               )}
@@ -693,6 +716,9 @@ export default function App() {
           onEnvChange={setEnv}
           onEnvReset={handleEnvReset}
           activeTab={activeTab}
+          damageResult={selectedCharacter
+            ? (activeTab === 'analysis' ? compareResults[selectedCharacter.id] : results[selectedCharacter.id])
+            : undefined}
         />
       </div>
 

@@ -236,13 +236,6 @@ export function DamageCalculator({ formation }: DamageCalculatorProps) {
               <span>平山 <span className="text-white font-medium">{counts.attrs['plain_mountain'] || 0}</span></span>
               <span className="text-gray-700">|</span>
               <span><span className="text-white font-medium">{counts.total}</span>/8</span>
-              <span className="text-gray-700">|</span>
-              <span>
-                合計DPS <span className="text-yellow-400 font-medium">{fmt(totalDPS)}</span>
-                {baseTotalDPS !== totalDPS && (
-                  <span className="text-gray-500 ml-1">(前: {fmt(baseTotalDPS)})</span>
-                )}
-              </span>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
