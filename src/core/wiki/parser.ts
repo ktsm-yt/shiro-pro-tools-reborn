@@ -13,10 +13,12 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     // 1. 名前 (h1 or title)
     const title = doc.querySelector('title')?.textContent || '';
     // タイトル形式: "江戸城 - 御城プロジェクトRE Wiki" -> "江戸城"
-    // 期間イベント等の接頭辞対応: "［絢爛］江戸城 - ..." -> "江戸城"
+    // 期間イベント等の接頭辞対応: "［絢爛］江戸城 - ..." -> "江戸城", period = "絢爛"
     let name = title.split('-')[0].trim() || 'Unknown';
+    let period: string | undefined;
     const periodMatch = name.match(/^［(.+?)］(.+)$/);
     if (periodMatch) {
+        period = periodMatch[1].trim();
         name = periodMatch[2].trim();
     }
 
@@ -474,11 +476,6 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     let weaponRange: '近' | '遠' | '遠近' | undefined;
     let weaponType: '物' | '術' | undefined;
     let placement: '近' | '遠' | '遠近' | undefined;
-    let period: string | undefined;
-
-    if (periodMatch) {
-        period = periodMatch[1];
-    }
 
     if (weapon !== 'Unknown' && weaponMapping[weapon]) {
         const info = weaponMapping[weapon];

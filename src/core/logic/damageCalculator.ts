@@ -113,10 +113,11 @@ function calculatePhase1(
     const selfBuffs = character.selfBuffs;
     const envAttackPercent = environment.attackPercent || 0;
 
-    // skills/strategies から攻撃バフを抽出
+    // skills/strategies/specialAbilities から攻撃バフを抽出
     const allBuffs = [
         ...(character.skills || []),
         ...(character.strategies || []),
+        ...(character.specialAbilities || []),
     ];
 
     // 射程→攻撃変換: 最終射程を計算（[竜焔]仙台城など）
@@ -212,8 +213,9 @@ function calculatePhase1(
         if (buff.conditionTags && buff.conditionTags.length > 0) {
             if (!areConditionsSatisfied(buff.conditionTags, character)) continue;
         }
-        // 効果重複バフは合算
-        duplicateBuffSum += buff.value;
+        // 効果重複バフは合算（効率指定がある場合は適用: 150%なら1.5倍）
+        const efficiency = buff.duplicateEfficiency ? buff.duplicateEfficiency / 100 : 1;
+        duplicateBuffSum += buff.value * efficiency;
     }
 
     // 射程→攻撃変換を適用
@@ -363,11 +365,12 @@ function calculatePhase2(
         }
     }
 
-    // skills/strategies から give_damage を抽出
+    // skills/strategies/specialAbilities から give_damage を抽出
     // 同種効果ルール: 同じソース種別(skill/strategy)内で最大値のみ適用
     const allBuffs = [
         ...(character.skills || []),
         ...(character.strategies || []),
+        ...(character.specialAbilities || []),
     ];
 
     // 条件に該当するgive_damageバフを収集（詳細情報を含む）
@@ -615,10 +618,11 @@ function calculatePhase4(
     damage: number;
     breakdown: DamageBreakdown['phase4'];
 } {
-    // skills/strategies から damage_dealt を抽出（最大値ルール）
+    // skills/strategies/specialAbilities から damage_dealt を抽出（最大値ルール）
     const allBuffs = [
         ...(character.skills || []),
         ...(character.strategies || []),
+        ...(character.specialAbilities || []),
     ];
 
     let selfDamageDealt = 0;
@@ -726,10 +730,11 @@ function calculateDPS(
 
     const selfBuffs = character.selfBuffs;
 
-    // skills/strategies から速度・隙バフを抽出
+    // skills/strategies/specialAbilities から速度・隙バフを抽出
     const allBuffs = [
         ...(character.skills || []),
         ...(character.strategies || []),
+        ...(character.specialAbilities || []),
     ];
 
     let parsedSpeedBuff = 0;
@@ -857,6 +862,7 @@ function calculateSpecialAttackDamage(
     const allBuffs = [
         ...(character.skills || []),
         ...(character.strategies || []),
+        ...(character.specialAbilities || []),
     ];
 
     let selfDamageDealt = 0;
@@ -944,6 +950,7 @@ function calculateStrategyDamage(
     const allBuffs = [
         ...(character.skills || []),
         ...(character.strategies || []),
+        ...(character.specialAbilities || []),
     ];
 
     let selfDamageDealt = 0;

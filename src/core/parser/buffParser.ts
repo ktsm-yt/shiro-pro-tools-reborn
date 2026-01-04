@@ -17,6 +17,7 @@ export interface ParsedBuff {
     costType?: CostBuffType;
     inspireSourceStat?: 'attack' | 'defense';
     isDuplicate?: boolean;
+    duplicateEfficiency?: number;    // 効果重複時の効率（デフォルト100%、「効果重複の150%」なら150）
     isExplicitlyNonDuplicate?: boolean;
     nonStacking?: boolean;
     stackPenalty?: number;
@@ -404,6 +405,10 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
     // 展開された line から検出（「攻撃5%と70(効果重複)」→「攻撃+70」では検出されない）
     const duplicateMatch = line.match(/効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/);
     const duplicatePosition = duplicateMatch ? line.indexOf(duplicateMatch[0]) : -1;
+    // 「効果重複の150%」のような効率指定を抽出（デフォルト100%）
+    // 「この効果(効果重複の150%)」のようなパターンにも対応
+    const efficiencyMatch = originalLine.match(/効果重複の(\d+)[%％]/);
+    const duplicateEfficiency = efficiencyMatch ? Number(efficiencyMatch[1]) : undefined;
     // 元のセグメントに効果重複があったが、展開で除去された場合は hasDuplicateMarker を無効化
     const originalHadDuplicate = /効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/.test(originalLine);
     const effectiveHasDuplicateMarker = originalHadDuplicate ? duplicatePosition >= 0 : hasDuplicateMarker;
@@ -501,6 +506,7 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
                 costType: p.costType,
                 inspireSourceStat: p.inspireSourceStat,
                 isDuplicate,
+                duplicateEfficiency: isDuplicate ? duplicateEfficiency : undefined,
                 isExplicitlyNonDuplicate,
                 nonStacking,
                 stackPenalty,

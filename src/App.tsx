@@ -5,13 +5,16 @@ import { FormationSlot } from './ui/components/FormationSlot';
 import { BuffMatrix } from './ui/components/BuffMatrix';
 import { CharacterModal } from './ui/components/CharacterModal';
 import { WikiImporter } from './ui/components/WikiImporter';
-import { RightSidebar } from './ui/components/RightSidebar';
+import { Settings } from 'lucide-react';
+import { SidebarModal } from './ui/components/SidebarModal';
+import { DamageDetailModal } from './ui/components/DamageDetailModal';
 import { DamageAnalysis } from './ui/components/DamageAnalysis';
 import { buildVisualBuffMatrix } from './ui/utils/visualBuffMatrix';
 import { useEnvironmentSettings } from './ui/hooks/useEnvironmentSettings';
 import { useDamageCalculation } from './ui/hooks/useDamageCalculation';
 import { useCharacterStorage } from './ui/hooks/useCharacterStorage';
 import { useFormationStorage } from './ui/hooks/useFormationStorage';
+import { useCompareList } from './ui/hooks/useCompareList';
 import { getAttributeMeta, isRangedWeapon } from './ui/constants/meta';
 import { loadCharacters } from './core/storage';
 import { FormationSaveModal } from './ui/components/FormationSaveModal';
@@ -30,11 +33,12 @@ export default function App() {
   const [formation, setFormation] = useState<Formation>({ slots: Array(8).fill(null) });
   const [activeTab, setActiveTab] = useState<ActiveTab>('matrix');
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
 
   // Modal states
-  const [isModalOpen, setIsModalOpen] = useState(false); // For matrix detail
+  const [isModalOpen, setIsModalOpen] = useState(false); // For matrix detail (legacy)
+  const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
+  const [damageDetailModalOpen, setDamageDetailModalOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isLoadMenuOpen, setIsLoadMenuOpen] = useState(false);
@@ -50,6 +54,9 @@ export default function App() {
 
   const loadMenuRef = useRef<HTMLDivElement | null>(null);
   const isSessionRestoredRef = useRef(false);
+
+  // Compare List for Analysis
+  const { compareIds, toggleCompare, clearCompareList } = useCompareList();
 
   // Persistence Hooks
   const { savedCharacters, addCharacter: saveCharacter, removeCharacter: deleteCharacterFromStorage, updateCharacter: updateCharacterInStorage } = useCharacterStorage();
@@ -101,13 +108,11 @@ export default function App() {
       const data = JSON.parse(raw) as {
         activeTab?: ActiveTab;
         isLeftSidebarCollapsed?: boolean;
-        isRightSidebarCollapsed?: boolean;
         selectedCharacterId?: string | null;
       };
 
       if (data.activeTab) setActiveTab(data.activeTab);
       if (typeof data.isLeftSidebarCollapsed === 'boolean') setIsLeftSidebarCollapsed(data.isLeftSidebarCollapsed);
-      if (typeof data.isRightSidebarCollapsed === 'boolean') setIsRightSidebarCollapsed(data.isRightSidebarCollapsed);
 
       if (data.selectedCharacterId) {
         const found = allCharacters.find(c => c.id === data.selectedCharacterId) || null;
@@ -124,7 +129,6 @@ export default function App() {
     const payload = {
       activeTab,
       isLeftSidebarCollapsed,
-      isRightSidebarCollapsed,
       selectedCharacterId: selectedCharacter?.id ?? null,
     };
     try {
@@ -132,7 +136,7 @@ export default function App() {
     } catch (e) {
       console.error('Failed to persist session', e);
     }
-  }, [activeTab, isLeftSidebarCollapsed, isRightSidebarCollapsed, selectedCharacter]);
+  }, [activeTab, isLeftSidebarCollapsed, selectedCharacter]);
 
 
   // Derived
@@ -147,7 +151,17 @@ export default function App() {
   }, [formation, mapConstraint]);
 
   // Damage Calculation
-  const { results, comparisons } = useDamageCalculation(activeChars, env);
+  const { results, comparisons, damageRanges } = useDamageCalculation(activeChars, env);
+
+  // Compare List Characters
+  const compareChars = useMemo(() => {
+    return compareIds
+      .map(id => savedCharacters.find(c => c.id === id))
+      .filter((c): c is Character => c !== undefined);
+  }, [compareIds, savedCharacters]);
+
+  // Compare List Damage Calculation
+  const { results: compareResults, comparisons: compareComparisons, damageRanges: compareDamageRanges } = useDamageCalculation(compareChars, env);
 
   // --- Handlers ---
 
@@ -167,6 +181,20 @@ export default function App() {
       slots[emptyIndex] = char;
       return { ...prev, slots };
     });
+  };
+
+  // Sidebar select handler - switches behavior based on active tab
+  const handleSidebarSelect = (char: Character) => {
+    if (activeTab === 'analysis') {
+      toggleCompare(char.id);  // Analysis: toggle compare list
+    } else {
+      // Matrix: toggle formation (add or remove)
+      if (formationIds.includes(char.id)) {
+        removeCharacter(char.id);
+      } else {
+        addCharacter(char);
+      }
+    }
   };
 
   const removeCharacter = (indexOrId: number | string) => {
@@ -248,33 +276,26 @@ export default function App() {
 
   const onCharClick = (char: Character) => {
     setSelectedCharacter(char);
-    // 右サイドバーが閉じている場合は開く（詳細を表示するため）
-    if (isRightSidebarCollapsed) {
-      setIsRightSidebarCollapsed(false);
-    }
-
-    // Matrixモードでかつモーダルで見たい場合のレガシーサポート（必要なら残す、今回は右サイドバー統合なので基本使わないが、Matrixでクリックしたときはモーダルがいい？）
-    // → 要望に従い右ペイン推奨だが、Matrixのクリック時の挙動は右サイドバーに表示させることにする
-    // ただし、CharacterModalも残しておき、必要に応じて使えるようにする
-    // setIsModalOpen(true); 
+    // 両タブで共通のDamageDetailModalを表示
+    setDamageDetailModalOpen(true);
   };
 
   // Tab Switcher Component
   const TabSwitcher = () => (
-    <div className="flex bg-gray-800 p-1 rounded-lg border border-gray-700">
+    <div className="inline-flex bg-gray-800 p-1 rounded-lg border border-gray-700">
       <button
         onClick={() => setActiveTab('matrix')}
-        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'matrix'
-          ? 'bg-white text-blue-600 shadow-sm'
+        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'matrix'
+          ? 'bg-white text-blue-600'
           : 'text-gray-400 hover:text-gray-200'
           }`}
       >
-        編成 & Matrix
+        Matrix
       </button>
       <button
         onClick={() => setActiveTab('analysis')}
-        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'analysis'
-          ? 'bg-white text-blue-600 shadow-sm'
+        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'analysis'
+          ? 'bg-white text-blue-600'
           : 'text-gray-400 hover:text-gray-200'
           }`}
       >
@@ -374,17 +395,15 @@ export default function App() {
 
       {/* Full Width Header */}
       <header className="px-4 py-2 border-b border-gray-800 bg-[#0f1626] flex flex-wrap items-center gap-3 shadow-sm z-20">
-        {/* Left: Title */}
-        <div className="flex items-center gap-4 shrink-0">
-          <div>
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">ShiroPro Tools Reborn</p>
-            <h1 className="text-lg font-bold text-white tracking-tight">
-              {activeTab === 'matrix' ? '編成 & バフマトリックス' : 'ダメージ計算 & 分析'}
-            </h1>
-          </div>
+        {/* Left: Title - same width as sidebar (w-56 = 14rem) */}
+        <div className="w-56 shrink-0 pl-2">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">ShiroPro Tools Reborn</p>
+          <h1 className="text-lg font-bold text-white tracking-tight">
+            {activeTab === 'matrix' ? '編成 & バフマトリックス' : 'ダメージ計算 & 分析'}
+          </h1>
         </div>
 
-        {/* Center: TabSwitcher */}
+        {/* TabSwitcher - aligned with main content area */}
         <div className="shrink-0">
           <TabSwitcher />
         </div>
@@ -554,6 +573,16 @@ export default function App() {
             )}
           </div>
 
+          {/* Environment Settings Button */}
+          <button
+            onClick={() => setSidebarModalOpen(true)}
+            className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-lg border transition-colors bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700"
+            title="環境設定"
+          >
+            <Settings size={14} />
+            <span>環境</span>
+          </button>
+
           <div className="flex items-center gap-2">
             {/* Save/Load Controls */}
             <div className="flex bg-gray-800 rounded-lg p-0.5 border border-gray-700 mr-2" ref={loadMenuRef}>
@@ -622,9 +651,11 @@ export default function App() {
           formationIds={formationIds}
           collapsed={isLeftSidebarCollapsed}
           onToggle={() => setIsLeftSidebarCollapsed(prev => !prev)}
-          onSelect={addCharacter}
+          onSelect={handleSidebarSelect}
           savedCharacterIds={savedCharacterIds}
           onDelete={requestDeleteCharacter}
+          compareIds={compareIds}
+          activeTab={activeTab}
         />
 
         {/* Center Content */}
@@ -635,7 +666,7 @@ export default function App() {
               {activeTab === 'matrix' && (
                 <>
                   <section>
-                    <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-8 gap-3">
                       {formation.slots.map((char, index) => (
                         <FormationSlot
                           key={index}
@@ -668,32 +699,23 @@ export default function App() {
               )}
 
               {activeTab === 'analysis' && (
-                <section className="h-full">
+                <section className="h-full overflow-y-auto">
                   <DamageAnalysis
-                    characters={activeChars}
-                    results={results}
-                    comparisons={comparisons}
+                    characters={compareChars}
+                    results={compareResults}
+                    comparisons={compareComparisons}
+                    damageRanges={compareDamageRanges}
                     env={env}
                     onCharClick={onCharClick}
-                    onRemove={(id) => removeCharacter(id)}
+                    onRemove={toggleCompare}
                     onUpdateCharacter={handleUpdateCharacter}
+                    mode="compare"
                   />
                 </section>
               )}
             </div>
           </div>
         </main>
-
-        {/* Right Sidebar */}
-        <RightSidebar
-          collapsed={isRightSidebarCollapsed}
-          onToggle={() => setIsRightSidebarCollapsed(prev => !prev)}
-          selectedChar={selectedCharacter}
-          env={env}
-          onEnvChange={setEnv}
-          onEnvReset={handleEnvReset}
-          activeTab={activeTab}
-        />
       </div>
 
       {/* Modals */}
@@ -739,6 +761,28 @@ export default function App() {
         onClose={() => { setIsModalOpen(false); setSelectedCharacter(null); }}
         currentBuffs={selectedCharacter ? visualMatrix[selectedCharacter.id] : undefined}
       />
+
+      {/* Sidebar Modal (環境設定用) */}
+      <SidebarModal
+        isOpen={sidebarModalOpen}
+        onClose={() => setSidebarModalOpen(false)}
+        env={env}
+        onEnvChange={setEnv}
+        onEnvReset={handleEnvReset}
+      />
+
+      {/* DamageDetailModal (共通: Matrix & Analysis両方) */}
+      {selectedCharacter && damageDetailModalOpen && (
+        <DamageDetailModal
+          character={selectedCharacter}
+          baseEnv={env}
+          onClose={() => {
+            setDamageDetailModalOpen(false);
+            setSelectedCharacter(null);
+          }}
+          onUpdateCharacter={handleUpdateCharacter}
+        />
+      )}
 
     </div>
   );

@@ -143,6 +143,7 @@ export interface Buff {
     costType?: CostBuffType;
     inspireSourceStat?: Stat;
     isDuplicate?: boolean;      // 効果重複
+    duplicateEfficiency?: number;  // 効果重複時の効率（デフォルト100%、「効果重複の150%」なら150）
     isExplicitlyNonDuplicate?: boolean; // 明示的な重複なし
     nonStacking?: boolean;      // 重複なし
     stackPenalty?: number;      // 重複時効果減少率
