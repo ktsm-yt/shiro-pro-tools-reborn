@@ -1,4 +1,5 @@
-import type { Character, DamageCalculationResult, DamageComparison } from '../../core/types';
+import { useMemo } from 'react';
+import type { Character, DamageCalculationResult, DamageComparison, DamageRange } from '../../core/types';
 import { getWeaponMeta } from '../constants/meta';
 
 const fmt = (n: number) => Math.floor(n).toLocaleString();
@@ -20,6 +21,7 @@ interface CompactCharacterCardProps {
     character: Character;
     result?: DamageCalculationResult;
     comparison?: DamageComparison;
+    damageRange?: DamageRange;
     onShowDetails: () => void;
     onRemove: () => void;
 }
@@ -28,13 +30,24 @@ export function CompactCharacterCard({
     character,
     result,
     comparison,
+    damageRange,
     onShowDetails,
     onRemove,
 }: CompactCharacterCardProps) {
+    // damageRangeからシナリオ別DPSを取得
+    const strategyScenario = useMemo(() => {
+        if (!damageRange?.scenarios) return null;
+        return damageRange.scenarios.find(s => s.scenario === 'strategy_active') || null;
+    }, [damageRange]);
+
     if (!result) return null;
     const icon = getWeaponMeta(character.weapon).icon;
     const prev = comparison?.before;
     const hasPrev = prev && (prev.totalDamage !== result.totalDamage || prev.dps !== result.dps || prev.inspireAmount !== result.inspireAmount);
+
+    // 計略中DPSを取得（result.strategyCycleDpsまたはdamageRangeのシナリオから）
+    const strategyDps = result.strategyCycleDps || strategyScenario?.result.dps;
+    const hasStrategyScenario = strategyDps && strategyDps !== result.dps;
 
     return (
         <div
@@ -96,7 +109,7 @@ export function CompactCharacterCard({
             )}
 
             {/* サイクルDPS・特殊攻撃・計略攻撃の追加表示 */}
-            {(result.cycleDps || result.strategyDamage || result.breakdown?.abilityMode) && (
+            {(result.cycleDps || result.strategyDamage || result.breakdown?.abilityMode || hasStrategyScenario) && (
                 <div className="mt-2 pt-2 border-t border-gray-700/50 space-y-1">
                     {/* 特殊攻撃サイクルDPS */}
                     {result.cycleDps && result.cycleDps !== result.dps && (
@@ -143,12 +156,12 @@ export function CompactCharacterCard({
                         </div>
                     )}
 
-                    {/* 計略サイクルDPS */}
-                    {result.strategyCycleDps && (
+                    {/* 計略中DPS (damageRangeシナリオまたはresultから) */}
+                    {hasStrategyScenario && (
                         <div className="flex items-baseline gap-2">
-                            <span className="text-[11px] text-gray-500">計略DPS</span>
-                            <span className="text-sm font-semibold text-cyan-300">{fmt(result.strategyCycleDps)}</span>
-                            {result.breakdown?.strategyDamage && (
+                            <span className="text-[11px] text-gray-500">計略中</span>
+                            <span className="text-sm font-semibold text-cyan-300">{fmt(strategyDps!)}</span>
+                            {result.breakdown?.strategyDamage?.cycleDuration && (
                                 <span className="text-[10px] text-gray-600">
                                     (/{result.breakdown.strategyDamage.cycleDuration}秒)
                                 </span>

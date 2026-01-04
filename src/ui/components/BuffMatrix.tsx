@@ -244,10 +244,10 @@ export function BuffMatrix({ formation, matrix, onCharClick }: BuffMatrixProps) 
     <div className="space-y-3">
       {/* ヘッダー行 */}
       <div className="flex items-center gap-2 px-3 py-2 sticky top-0 bg-gray-900 z-10">
-        <div className="w-28 text-xs text-gray-400">項目</div>
+        <div className="w-20 flex-shrink-0 text-xs text-gray-400">項目</div>
         <div
-          className="flex-1 grid gap-2"
-          style={{ gridTemplateColumns: `repeat(${activeChars.length}, minmax(120px, 1fr))` }}
+          className="flex-1 grid gap-1.5 min-w-0"
+          style={{ gridTemplateColumns: `repeat(${activeChars.length}, minmax(0, 1fr))` }}
         >
           {activeChars.map((char) => {
             const attr = getAttributeMeta(char).meta;
@@ -284,13 +284,13 @@ export function BuffMatrix({ formation, matrix, onCharClick }: BuffMatrixProps) 
                   key={`${stat.key}-${stat.isFlat ? 'flat' : 'pct'}-${idx}`}
                   className="flex items-center gap-2 py-2 border-t border-gray-700 first:border-t-0"
                 >
-                  <div className="w-28 flex items-center gap-1.5 text-sm text-gray-300">
+                  <div className="w-20 flex-shrink-0 flex items-center gap-1 text-xs text-gray-300">
                     <span>{stat.icon}</span>
-                    <span>{stat.name}</span>
+                    <span className="truncate">{stat.name}</span>
                   </div>
                   <div
-                    className="flex-1 grid gap-2"
-                    style={{ gridTemplateColumns: `repeat(${activeChars.length}, minmax(120px, 1fr))` }}
+                    className="flex-1 grid gap-1.5 min-w-0"
+                    style={{ gridTemplateColumns: `repeat(${activeChars.length}, minmax(0, 1fr))` }}
                   >
                     {activeChars.map((char) => {
                       const cell: VisualBuffCell =

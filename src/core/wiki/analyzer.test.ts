@@ -722,6 +722,27 @@ describe('気関連パターン', () => {
         expect(flatBuff).toBeDefined();
         expect(flatBuff?.value).toBe(70);
     });
+
+    // 効果重複効率テスト（鳥取城など）
+    it('should parse "攻撃2.5倍(効果重複)この効果(効果重複の150%)" with duplicateEfficiency', () => {
+        const result = analyzeBuffText('攻撃2.5倍(効果重複)この効果(効果重複の150%)');
+        expect(result).toHaveLength(1);
+        const buff = result[0];
+        expect(buff.stat).toBe('effect_duplicate_attack');
+        expect(buff.value).toBe(150); // 2.5倍 = 150%
+        expect(buff.isDuplicate).toBe(true);
+        expect(buff.duplicateEfficiency).toBe(150);
+    });
+
+    it('should parse "攻撃30%上昇(効果重複)" without duplicateEfficiency (default)', () => {
+        const result = analyzeBuffText('攻撃30%上昇(効果重複)');
+        expect(result).toHaveLength(1);
+        const buff = result[0];
+        expect(buff.stat).toBe('effect_duplicate_attack');
+        expect(buff.value).toBe(30);
+        expect(buff.isDuplicate).toBe(true);
+        expect(buff.duplicateEfficiency).toBeUndefined();
+    });
 });
 
 describe('伏兵配置（千賀地氏城など）', () => {

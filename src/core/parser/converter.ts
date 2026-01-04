@@ -12,6 +12,7 @@ export function convertToRebornBuff(parsed: ParsedBuff): Omit<Buff, 'id' | 'sour
         costType: parsed.costType,
         inspireSourceStat: parsed.inspireSourceStat as Buff['inspireSourceStat'],
         isDuplicate: parsed.isDuplicate,
+        duplicateEfficiency: parsed.duplicateEfficiency,
         isExplicitlyNonDuplicate: parsed.isExplicitlyNonDuplicate,
         nonStacking: parsed.nonStacking,
         stackPenalty: parsed.stackPenalty,

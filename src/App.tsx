@@ -5,9 +5,10 @@ import { FormationSlot } from './ui/components/FormationSlot';
 import { BuffMatrix } from './ui/components/BuffMatrix';
 import { CharacterModal } from './ui/components/CharacterModal';
 import { WikiImporter } from './ui/components/WikiImporter';
-import { RightSidebar } from './ui/components/RightSidebar';
+import { Settings } from 'lucide-react';
+import { SidebarModal } from './ui/components/SidebarModal';
+import { DamageDetailModal } from './ui/components/DamageDetailModal';
 import { DamageAnalysis } from './ui/components/DamageAnalysis';
-import { CompareListSelector } from './ui/components/CompareListSelector';
 import { buildVisualBuffMatrix } from './ui/utils/visualBuffMatrix';
 import { useEnvironmentSettings } from './ui/hooks/useEnvironmentSettings';
 import { useDamageCalculation } from './ui/hooks/useDamageCalculation';
@@ -32,11 +33,12 @@ export default function App() {
   const [formation, setFormation] = useState<Formation>({ slots: Array(8).fill(null) });
   const [activeTab, setActiveTab] = useState<ActiveTab>('matrix');
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
 
   // Modal states
-  const [isModalOpen, setIsModalOpen] = useState(false); // For matrix detail
+  const [isModalOpen, setIsModalOpen] = useState(false); // For matrix detail (legacy)
+  const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
+  const [damageDetailModalOpen, setDamageDetailModalOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isLoadMenuOpen, setIsLoadMenuOpen] = useState(false);
@@ -106,13 +108,11 @@ export default function App() {
       const data = JSON.parse(raw) as {
         activeTab?: ActiveTab;
         isLeftSidebarCollapsed?: boolean;
-        isRightSidebarCollapsed?: boolean;
         selectedCharacterId?: string | null;
       };
 
       if (data.activeTab) setActiveTab(data.activeTab);
       if (typeof data.isLeftSidebarCollapsed === 'boolean') setIsLeftSidebarCollapsed(data.isLeftSidebarCollapsed);
-      if (typeof data.isRightSidebarCollapsed === 'boolean') setIsRightSidebarCollapsed(data.isRightSidebarCollapsed);
 
       if (data.selectedCharacterId) {
         const found = allCharacters.find(c => c.id === data.selectedCharacterId) || null;
@@ -129,7 +129,6 @@ export default function App() {
     const payload = {
       activeTab,
       isLeftSidebarCollapsed,
-      isRightSidebarCollapsed,
       selectedCharacterId: selectedCharacter?.id ?? null,
     };
     try {
@@ -137,7 +136,7 @@ export default function App() {
     } catch (e) {
       console.error('Failed to persist session', e);
     }
-  }, [activeTab, isLeftSidebarCollapsed, isRightSidebarCollapsed, selectedCharacter]);
+  }, [activeTab, isLeftSidebarCollapsed, selectedCharacter]);
 
 
   // Derived
@@ -182,6 +181,20 @@ export default function App() {
       slots[emptyIndex] = char;
       return { ...prev, slots };
     });
+  };
+
+  // Sidebar select handler - switches behavior based on active tab
+  const handleSidebarSelect = (char: Character) => {
+    if (activeTab === 'analysis') {
+      toggleCompare(char.id);  // Analysis: toggle compare list
+    } else {
+      // Matrix: toggle formation (add or remove)
+      if (formationIds.includes(char.id)) {
+        removeCharacter(char.id);
+      } else {
+        addCharacter(char);
+      }
+    }
   };
 
   const removeCharacter = (indexOrId: number | string) => {
@@ -263,15 +276,8 @@ export default function App() {
 
   const onCharClick = (char: Character) => {
     setSelectedCharacter(char);
-    // 右サイドバーが閉じている場合は開く（詳細を表示するため）
-    if (isRightSidebarCollapsed) {
-      setIsRightSidebarCollapsed(false);
-    }
-
-    // Matrixモードでかつモーダルで見たい場合のレガシーサポート（必要なら残す、今回は右サイドバー統合なので基本使わないが、Matrixでクリックしたときはモーダルがいい？）
-    // → 要望に従い右ペイン推奨だが、Matrixのクリック時の挙動は右サイドバーに表示させることにする
-    // ただし、CharacterModalも残しておき、必要に応じて使えるようにする
-    // setIsModalOpen(true); 
+    // 両タブで共通のDamageDetailModalを表示
+    setDamageDetailModalOpen(true);
   };
 
   // Tab Switcher Component
@@ -567,6 +573,16 @@ export default function App() {
             )}
           </div>
 
+          {/* Environment Settings Button */}
+          <button
+            onClick={() => setSidebarModalOpen(true)}
+            className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-lg border transition-colors bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700"
+            title="環境設定"
+          >
+            <Settings size={14} />
+            <span>環境</span>
+          </button>
+
           <div className="flex items-center gap-2">
             {/* Save/Load Controls */}
             <div className="flex bg-gray-800 rounded-lg p-0.5 border border-gray-700 mr-2" ref={loadMenuRef}>
@@ -635,9 +651,11 @@ export default function App() {
           formationIds={formationIds}
           collapsed={isLeftSidebarCollapsed}
           onToggle={() => setIsLeftSidebarCollapsed(prev => !prev)}
-          onSelect={addCharacter}
+          onSelect={handleSidebarSelect}
           savedCharacterIds={savedCharacterIds}
           onDelete={requestDeleteCharacter}
+          compareIds={compareIds}
+          activeTab={activeTab}
         />
 
         {/* Center Content */}
@@ -682,14 +700,6 @@ export default function App() {
 
               {activeTab === 'analysis' && (
                 <section className="h-full overflow-y-auto">
-                  {/* キャラ選択UI */}
-                  <CompareListSelector
-                    allCharacters={savedCharacters}
-                    selectedIds={compareIds}
-                    onToggle={toggleCompare}
-                    onClear={clearCompareList}
-                  />
-
                   <DamageAnalysis
                     characters={compareChars}
                     results={compareResults}
@@ -706,20 +716,6 @@ export default function App() {
             </div>
           </div>
         </main>
-
-        {/* Right Sidebar */}
-        <RightSidebar
-          collapsed={isRightSidebarCollapsed}
-          onToggle={() => setIsRightSidebarCollapsed(prev => !prev)}
-          selectedChar={selectedCharacter}
-          env={env}
-          onEnvChange={setEnv}
-          onEnvReset={handleEnvReset}
-          activeTab={activeTab}
-          damageResult={selectedCharacter
-            ? (activeTab === 'analysis' ? compareResults[selectedCharacter.id] : results[selectedCharacter.id])
-            : undefined}
-        />
       </div>
 
       {/* Modals */}
@@ -765,6 +761,28 @@ export default function App() {
         onClose={() => { setIsModalOpen(false); setSelectedCharacter(null); }}
         currentBuffs={selectedCharacter ? visualMatrix[selectedCharacter.id] : undefined}
       />
+
+      {/* Sidebar Modal (環境設定用) */}
+      <SidebarModal
+        isOpen={sidebarModalOpen}
+        onClose={() => setSidebarModalOpen(false)}
+        env={env}
+        onEnvChange={setEnv}
+        onEnvReset={handleEnvReset}
+      />
+
+      {/* DamageDetailModal (共通: Matrix & Analysis両方) */}
+      {selectedCharacter && damageDetailModalOpen && (
+        <DamageDetailModal
+          character={selectedCharacter}
+          baseEnv={env}
+          onClose={() => {
+            setDamageDetailModalOpen(false);
+            setSelectedCharacter(null);
+          }}
+          onUpdateCharacter={handleUpdateCharacter}
+        />
+      )}
 
     </div>
   );
