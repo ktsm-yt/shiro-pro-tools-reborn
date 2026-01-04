@@ -243,6 +243,9 @@ const TAG_TO_CONDITION: Record<string, ConditionTag> = {
     '地獄': 'hell',
 };
 
+// タグ条件（［絢爛］城娘は50%上昇 など）
+const TAG_CONDITIONAL_PATTERN = /[［\[]([^\]］]+)[］\]](?:城娘)?(?:は|には)\s*\d+[%％]?\s*(?:上昇|増加)?/g;
+
 /**
  * 条件付きタグバフを抽出
  * 例: "攻撃40%、［絢爛］城娘は50%上昇" → 50%のkenran条件付きバフ
@@ -251,7 +254,7 @@ function extractTagConditionalBuffs(line: string, baseBuffs: ParsedBuff[]): Pars
     const additionalBuffs: ParsedBuff[] = [];
 
     // パターン: ［タグ］城娘は○○%上昇 or ［タグ］は○○%
-    const tagPattern = /[［\[]([^\]］]+)[］\]](?:城娘)?(?:は|には)(\d+)[%％]?(?:上昇|増加)?/g;
+    const tagPattern = /[［\[]([^\]］]+)[］\]](?:城娘)?(?:は|には)\s*(\d+)[%％]?\s*(?:上昇|増加)?/g;
     let match;
 
     while ((match = tagPattern.exec(line)) !== null) {
@@ -348,12 +351,15 @@ function detectSentenceContext(sentence: string): SentenceContext {
 export function parseSkillLine(line: string): ParsedBuff[] {
     // 前処理: 全角→半角、表記揺れ正規化
     const preprocessed = preprocessText(line);
+    // ［絢爛］城娘は50%上昇 のようなタグ条件は別処理なので、
+    // 条件タグが他のバフに伝播しないよう解析対象から除外する
+    const parseTargetText = preprocessed.replace(TAG_CONDITIONAL_PATTERN, '。');
 
     // 効果重複の検出は文分割前に行う（「攻撃が50%上昇。効果重複」のようなパターン対応）
-    const hasDuplicateMarker = /効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/.test(preprocessed);
+    const hasDuplicateMarker = /効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/.test(parseTargetText);
 
     // 文ごとに分割（。や｡で区切る）
-    const sentences = preprocessed.split(/[。｡]/);
+    const sentences = parseTargetText.split(/[。｡]/);
 
     const allResults: ParsedBuff[] = [];
 
@@ -400,6 +406,7 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
     const results: ParsedBuff[] = [];
     const seen = new Set<string>();
     const detectedTarget = detectTarget(line);
+    const isStrategyContext = /計略(?:中|使用時|発動時|発動中)/.test(originalLine);
     // 効果重複の検出（展開後の行でチェック）
     // 「割合重複」も同じく効果重複として扱う
     // 展開された line から検出（「攻撃5%と70(効果重複)」→「攻撃+70」では検出されない）
@@ -424,7 +431,8 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
     const stackableTrigger = /(敵撃破(?:毎|ごと)に|巨大化(?:毎|ごと)に|配置(?:毎|ごと)に)/.test(originalLine);
 
     // 文ごとの条件タグと全体の条件タグをマージ
-    const globalConditionTags = extractConditionTags(originalLine);
+    const conditionSource = originalLine.replace(TAG_CONDITIONAL_PATTERN, '');
+    const globalConditionTags = extractConditionTags(conditionSource);
     // 自身専用文はグローバルタグを適用しない。文ごとのタグがあればそれを優先。
     let conditionTags: ConditionTag[];
     if (sentenceContext.isSelfOnly) {
@@ -440,6 +448,8 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
     const sentenceTarget = sentenceContext.target;
 
     patterns.forEach((p: ParsedPattern) => {
+        // 「計略中」系は専用抽出で扱うため、重複しやすいstatはここでスキップ
+        if (isStrategyContext && (p.stat === 'give_damage' || p.stat === 'attack_gap')) return;
         let match: RegExpExecArray | null;
         const regex = new RegExp(p.regex, 'g');
         while ((match = regex.exec(line)) !== null) {
@@ -486,6 +496,7 @@ function parseSkillLineSingle(line: string, originalLine: string, sentenceContex
                 'attack': 'effect_duplicate_attack',
                 'defense': 'effect_duplicate_defense',
                 'range': 'effect_duplicate_range',
+                'attack_speed': 'effect_duplicate_attack_speed',
             };
             const effectiveStat = (isDuplicate && p.stat in duplicateStatMap)
                 ? duplicateStatMap[p.stat] as typeof p.stat

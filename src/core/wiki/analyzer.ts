@@ -21,7 +21,7 @@ function detectRangeToAttack(texts: string[]): { enabled: boolean; threshold?: n
 
     // 閾値パターン: "射程が1000以上の場合" など（攻撃加算用）
     // 注: "与えるダメージ" が含まれている場合は別の条件（conditionalGiveDamage）なので除外
-    const thresholdMatch = combinedText.match(/射程[がを]?(\d+)以上の?場合(?!.*与えるダメージ)/);
+    const thresholdMatch = combinedText.match(/射程[がを]?(\d+)以上の?場合(?!.*与える\s*ダメージ)/);
     const threshold = thresholdMatch ? parseInt(thresholdMatch[1], 10) : undefined;
 
     return { enabled: true, threshold };
@@ -39,7 +39,7 @@ function detectConditionalGiveDamage(texts: string[]): { rangeThreshold: number;
     const results: { rangeThreshold: number; multiplier: number }[] = [];
 
     // 射程条件パターン: "射程が○以上の場合与えるダメージが○倍"
-    const rangePattern = /射程[がを]?(\d+)以上の?場合.*?与えるダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/g;
+    const rangePattern = /射程[がを]?(\d+)以上の?場合.*?与える\s*ダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/g;
     let match;
     while ((match = rangePattern.exec(combinedText)) !== null) {
         results.push({
@@ -142,6 +142,9 @@ function detectAmbushPlacement(
 
     const maxCount = parseInt(ambushMatch[1], 10);
 
+    // 同種効果と重複 → 累乗計算
+    const isMultiplicative = /同種効果(?:と)?重複/.test(combinedText);
+
     // 配置中のバフを探す（計略から）
     // 例: "配置中、自身の攻撃と攻撃速度が40%上昇（同種効果と重複）"
     const buffMatch = strategyText.match(/配置中[、,]?[^。]*(?:攻撃(?:と攻撃速度)?(?:が|を)?(\d+)[%％]上昇)/);
@@ -149,7 +152,9 @@ function detectAmbushPlacement(
     let attackMultiplier: number | undefined;
     let attackSpeedMultiplier: number | undefined;
 
-    if (buffMatch) {
+    // 効果重複（同種効果と重複）を持つ場合は、パーサーで effect_duplicate_* として処理されるため、
+    // ここでは attackMultiplier/attackSpeedMultiplier を設定しない
+    if (buffMatch && !isMultiplicative) {
         const buffPercent = parseInt(buffMatch[1], 10);
         attackMultiplier = 1 + buffPercent / 100; // 40% → 1.4
 
@@ -157,9 +162,6 @@ function detectAmbushPlacement(
         const hasAttackSpeed = /攻撃と攻撃速度/.test(strategyText) || /攻撃速度[がを]?\d+[%％]上昇/.test(strategyText);
         attackSpeedMultiplier = hasAttackSpeed ? attackMultiplier : undefined;
     }
-
-    // 同種効果と重複 → 累乗計算
-    const isMultiplicative = /同種効果(?:と)?重複/.test(combinedText);
 
     return {
         maxCount,
@@ -239,7 +241,7 @@ function parseStrategyDamageText(texts: string[]): {
         buffAttackSpeed = parseFloat(comboMatch[1]);
     } else {
         // 「与えるダメージ」を先にチェック（Phase 2乗算）
-        const giveDamageMatch = combinedText.match(/与えるダメージ[がを]?(\d+(?:\.\d+)?)倍/);
+        const giveDamageMatch = combinedText.match(/与える\s*ダメージ[がを]?(\d+(?:\.\d+)?)倍/);
         if (giveDamageMatch) {
             buffGiveDamage = parseFloat(giveDamageMatch[1]);
         }
@@ -314,7 +316,7 @@ function detectAbilityMode(strategyTexts: string[]): {
 
     // 「与えるダメージ○倍」パターン（Phase 2 give_damage）
     let giveDamage: number | undefined;
-    const giveDamageMatch = combinedText.match(/与(?:える)?ダメージ[がを]?\s*(\d+(?:\.\d+)?)倍/);
+    const giveDamageMatch = combinedText.match(/与える\s*ダメージ[がを]?\s*(\d+(?:\.\d+)?)倍/);
     if (giveDamageMatch) {
         const multiplier = parseFloat(giveDamageMatch[1]);
         giveDamage = Math.round((multiplier - 1) * 100); // 1.2倍 → 20%
@@ -346,6 +348,46 @@ function detectAbilityMode(strategyTexts: string[]): {
         duration,
         cooldown,
     };
+}
+
+/**
+ * 特技テキストから「計略中」の効果を抽出する
+ * 例: "計略中、自身の与えるダメージ1.3倍、攻撃後の隙60%短縮"
+ * 例: "計略使用時自身の与えるダメージ1.3倍"
+ *     → { buffGiveDamage: 1.3, buffAttackGap: 60 }
+ */
+function extractSkillStrategyBuffs(skillTexts: string[]): {
+    buffGiveDamage?: number;
+    buffAttackGap?: number;
+} | undefined {
+    if (!skillTexts || skillTexts.length === 0) return undefined;
+
+    const combinedText = skillTexts.join(' ');
+
+    // 「計略中」「計略使用時」「計略発動時」を含むかチェック
+    const strategyPrefix = /計略(?:中|使用時|発動時|発動中)/;
+    if (!strategyPrefix.test(combinedText)) return undefined;
+
+    let buffGiveDamage: number | undefined;
+    let buffAttackGap: number | undefined;
+
+    // 「計略中/使用時、～与えるダメージ○倍」パターン
+    const giveDamageMatch = combinedText.match(/計略(?:中|使用時|発動時|発動中)[^。]*与える\s*ダメージ[がを]?\s*(\d+(?:\.\d+)?)倍/);
+    if (giveDamageMatch) {
+        buffGiveDamage = parseFloat(giveDamageMatch[1]);
+    }
+
+    // 「計略中/使用時、～隙○%短縮」パターン
+    const gapMatch = combinedText.match(/計略(?:中|使用時|発動時|発動中)[^。]*(?:攻撃後の)?隙[がを]?\s*(\d+)[%％](?:短縮|減少)/);
+    if (gapMatch) {
+        buffAttackGap = parseInt(gapMatch[1], 10);
+    }
+
+    if (buffGiveDamage === undefined && buffAttackGap === undefined) {
+        return undefined;
+    }
+
+    return { buffGiveDamage, buffAttackGap };
 }
 
 /**
@@ -606,6 +648,39 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
 
     // 計略ダメージ情報を解析
     const strategyDamage = parseStrategyDamageText(rawData.strategyTexts ?? []);
+
+    // 特技テキストから「計略中」のバフを抽出
+    // 計略常時発動の前提なので、Phase 2の通常バフとして扱う
+    const skillStrategyBuffs = extractSkillStrategyBuffs(rawData.skillTexts ?? []);
+    if (skillStrategyBuffs) {
+        // 与えるダメージ → give_damage バフ（Phase 2乗算）
+        if (skillStrategyBuffs.buffGiveDamage !== undefined) {
+            const percentValue = Math.round((skillStrategyBuffs.buffGiveDamage - 1) * 100);
+            skills.push({
+                id: `buff_${buffIdCounter++}`,
+                stat: 'give_damage',
+                mode: 'percent_max',
+                value: percentValue,
+                target: 'self',
+                source: 'self_skill',
+                isActive: true,
+                note: '計略中',
+            });
+        }
+        // 隙短縮 → attack_gap バフ
+        if (skillStrategyBuffs.buffAttackGap !== undefined) {
+            skills.push({
+                id: `buff_${buffIdCounter++}`,
+                stat: 'attack_gap',
+                mode: 'percent_reduction',
+                value: skillStrategyBuffs.buffAttackGap,
+                target: 'self',
+                source: 'self_skill',
+                isActive: true,
+                note: '計略中',
+            });
+        }
+    }
 
     // 特殊能力モード（計略発動中の通常攻撃置換）を検出
     const abilityMode = detectAbilityMode(rawData.strategyTexts ?? []);

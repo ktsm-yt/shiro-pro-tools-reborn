@@ -26,7 +26,8 @@ export type DamageMultiplierStat =
     | 'critical_bonus'
     | 'effect_duplicate_attack'   // 攻撃効果重複（Phase 1乗算）
     | 'effect_duplicate_defense'  // 防御効果重複
-    | 'effect_duplicate_range';   // 射程効果重複
+    | 'effect_duplicate_range'    // 射程効果重複
+    | 'effect_duplicate_attack_speed';  // 攻撃速度効果重複
 
 export type EnemyDebuffStat =
     | 'enemy_attack'
@@ -430,6 +431,11 @@ export interface DamageBreakdown {
         totalFrames: number;
         attacksPerSecond: number;
         dps: number;
+        // バフ適用情報（UI表示用）
+        baseAttackFrames: number;      // バフ適用前の攻撃フレーム
+        baseGapFrames: number;         // バフ適用前の隙フレーム
+        attackSpeedMultiplier: number; // 攻撃速度倍率（例: 2.5 = 250%）
+        gapReductionPercent: number;   // 隙短縮%（例: 60 = 60%短縮）
     };
     specialAttack?: {
         multiplier: number;
@@ -439,6 +445,7 @@ export interface DamageBreakdown {
         rangeMultiplier?: number; // 射程倍率
         stackMultiplier?: number; // スタック倍率（最大時）
         effectiveMultiplier: number; // 実効倍率（multiplier × stackMultiplier）
+        giveDamageMultiplier?: number; // 特殊攻撃専用の与えるダメージ倍率
         damage: number;          // 特殊攻撃の瞬間ダメージ（連撃込み）
         cycleDps: number;        // Nサイクル加重平均DPS
     };

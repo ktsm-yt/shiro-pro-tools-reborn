@@ -133,6 +133,26 @@ describe('analyzeBuffText', () => {
             });
         });
 
+        it('should parse "与える ダメージ1.3倍" with line breaks correctly', () => {
+            const result = analyzeBuffText('自身の与える\nダメージ1.3倍');
+            const giveDamage = result.find(b => b.stat === 'give_damage');
+            expect(giveDamage).toBeDefined();
+            expect(giveDamage?.value).toBe(30);
+        });
+
+        it('should not attach season tags to give_damage in mixed tag-conditional text', () => {
+            const text = [
+                '自身の攻撃が敵の防御を無視し、耐久50%以下の敵に与える',
+                'ダメージ1.5倍。射程内城娘の攻撃40%、［絢爛］城娘は50%上昇',
+                '計略中、自身の与えるダメージ1.3倍、攻撃後の隙60%短縮',
+            ].join('\n');
+            const result = analyzeBuffText(text);
+            const giveDamageBuffs = result.filter(b => b.stat === 'give_damage');
+            expect(giveDamageBuffs.length).toBeGreaterThan(0);
+            // 「絢爛」タグがgive_damageに伝播しない
+            expect(giveDamageBuffs.some(b => b.conditionTags?.includes('kenran'))).toBe(false);
+        });
+
         it('should parse "撃破気が1増加" correctly (enemy defeat cost)', () => {
             const result = analyzeBuffText('撃破気が1増加');
             expect(result).toHaveLength(1);
@@ -538,6 +558,72 @@ describe('analyzeCharacter', () => {
         expect(character.rangeToAttack).toBeUndefined();
     });
 
+    it('should extract "計略中" buffs from skill texts as Phase 2 buffs (絢爛ダノター城)', () => {
+        const rawData: RawCharacterData = {
+            name: '[絢爛]ダノター城',
+            url: 'http://example.com',
+            weapon: '銃',
+            attributes: ['山'],
+            baseStats: {
+                attack: 1000,
+            },
+            skillTexts: [
+                '計略中、自身の与えるダメージ1.3倍、攻撃後の隙60%短縮',
+            ],
+            strategyTexts: [
+                '15秒間自身の攻撃速度2.5倍、1.5倍の射程で射程内全敵に攻撃の2倍の5連続攻撃',
+            ],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 「計略中」バフがskillsに追加されていること（計略常時発動前提でPhase 2バフとして扱う）
+        const giveDamageBuff = character.skills.find(b => b.stat === 'give_damage' && b.note === '計略中');
+        expect(giveDamageBuff).toBeDefined();
+        expect(giveDamageBuff?.value).toBe(30); // 1.3倍 → 30%
+        expect(giveDamageBuff?.mode).toBe('percent_max');
+        expect(giveDamageBuff?.source).toBe('self_skill');
+        expect(character.skills.filter(b => b.stat === 'give_damage').length).toBe(1);
+
+        const gapReductionBuff = character.skills.find(b => b.stat === 'attack_gap' && b.note === '計略中');
+        expect(gapReductionBuff).toBeDefined();
+        expect(gapReductionBuff?.value).toBe(60);
+        expect(gapReductionBuff?.mode).toBe('percent_reduction');
+
+        // 計略本体の情報も正しく設定されていること
+        expect(character.strategyDamage).toBeDefined();
+        expect(character.strategyDamage?.multiplier).toBe(2);
+        expect(character.strategyDamage?.hits).toBe(5);
+        expect(character.strategyDamage?.buffAttackSpeed).toBe(2.5);
+    });
+
+    it('should extract "計略使用時" buffs from skill texts as Phase 2 buffs', () => {
+        const rawData: RawCharacterData = {
+            name: 'テストキャラ',
+            url: 'http://example.com',
+            weapon: '銃',
+            attributes: ['山'],
+            baseStats: {},
+            skillTexts: [
+                '計略使用時自身の与えるダメージ1.3倍、攻撃後の隙60%短縮',
+            ],
+            strategyTexts: [
+                '10秒間1.5倍の射程で射程内全敵に攻撃の2倍の3連続攻撃',
+            ],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 「計略使用時」もパースされること
+        const giveDamageBuff = character.skills.find(b => b.stat === 'give_damage' && b.note === '計略中');
+        expect(giveDamageBuff).toBeDefined();
+        expect(giveDamageBuff?.value).toBe(30);
+
+        const gapReductionBuff = character.skills.find(b => b.stat === 'attack_gap' && b.note === '計略中');
+        expect(gapReductionBuff).toBeDefined();
+        expect(gapReductionBuff?.value).toBe(60);
+    });
+
     // 他 stat は今後の拡張で追加
 });
 
@@ -758,11 +844,21 @@ describe('伏兵配置（千賀地氏城など）', () => {
         };
         const character = analyzeCharacter(raw);
 
+        // ambushInfo には maxCount と isMultiplicative のみ設定
+        // 効果重複バフはパーサーで effect_duplicate_* として処理されるため attackMultiplier は設定しない
         expect(character.ambushInfo).toBeDefined();
         expect(character.ambushInfo?.maxCount).toBe(2);
-        expect(character.ambushInfo?.attackMultiplier).toBe(1.4);
-        expect(character.ambushInfo?.attackSpeedMultiplier).toBe(1.4);
+        expect(character.ambushInfo?.attackMultiplier).toBeUndefined();
+        expect(character.ambushInfo?.attackSpeedMultiplier).toBeUndefined();
         expect(character.ambushInfo?.isMultiplicative).toBe(true);
+
+        // 効果重複バフがパースされていることを確認
+        const duplicateAttack = character.strategies.find(b => b.stat === 'effect_duplicate_attack');
+        const duplicateSpeed = character.strategies.find(b => b.stat === 'effect_duplicate_attack_speed');
+        expect(duplicateAttack).toBeDefined();
+        expect(duplicateAttack?.value).toBe(40);
+        expect(duplicateSpeed).toBeDefined();
+        expect(duplicateSpeed?.value).toBe(40);
     });
 
     it('should detect ambush placement without stacking buffs', () => {
@@ -905,5 +1001,83 @@ describe('specialAttack stackMultiplier', () => {
         expect(character.specialAttack).toBeDefined();
         expect(character.specialAttack?.multiplier).toBe(6);
         expect(character.specialAttack?.stackMultiplier).toBeUndefined();
+    });
+});
+
+describe('千賀地氏城 特技パターン', () => {
+    it('should parse "攻撃速度が高いほど与えるダメージが上昇(上限1.7倍)" as give_damage', () => {
+        const raw: RawCharacterData = {
+            name: '千賀地氏城',
+            weapon: '投剣',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 363, defense: 204, range: 230 },
+            skillTexts: [
+                '攻撃速度が高いほど与えるダメージが上昇(上限1.7倍)',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        // give_damage バフが検出されること
+        const giveDamageBuff = character.skills.find(b => b.stat === 'give_damage');
+        expect(giveDamageBuff).toBeDefined();
+        expect(giveDamageBuff?.value).toBe(70);  // 1.7倍 = 70%
+        expect(giveDamageBuff?.mode).toBe('percent_max');
+        expect(giveDamageBuff?.note).toContain('攻撃速度依存');
+    });
+
+    it('should parse "自身が攻撃する度に攻撃後の隙が10秒間7%短縮(上限70%)" as attack_gap', () => {
+        const raw: RawCharacterData = {
+            name: '千賀地氏城',
+            weapon: '投剣',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 363, defense: 204, range: 230 },
+            skillTexts: [
+                '自身が攻撃する度に攻撃後の隙が10秒間7%短縮(上限70%)',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        // attack_gap バフが検出されること
+        const gapBuff = character.skills.find(b => b.stat === 'attack_gap');
+        expect(gapBuff).toBeDefined();
+        expect(gapBuff?.value).toBe(70);  // 上限70%
+        expect(gapBuff?.mode).toBe('percent_reduction');
+    });
+
+    it('should parse both patterns together from skill texts', () => {
+        const raw: RawCharacterData = {
+            name: '千賀地氏城',
+            weapon: '投剣',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 363, defense: 204, range: 230 },
+            skillTexts: [
+                '自身が攻撃する度に攻撃後の隙が10秒間7%短縮(上限70%)',
+                '攻撃速度が高いほど与えるダメージが上昇(上限1.7倍)',
+                '射程内の味方の射程が40上昇',
+            ],
+            strategyTexts: [
+                '敵に狙われない伏兵を配置（2体まで）。自身の1.4倍の攻撃で敵4体に攻撃。配置中、自身の攻撃と攻撃速度が40%上昇（同種効果と重複）',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        // 隙短縮
+        const gapBuff = character.skills.find(b => b.stat === 'attack_gap');
+        expect(gapBuff).toBeDefined();
+        expect(gapBuff?.value).toBe(70);
+
+        // 攻撃速度依存ダメージ
+        const giveDamageBuff = character.skills.find(b => b.stat === 'give_damage');
+        expect(giveDamageBuff).toBeDefined();
+        expect(giveDamageBuff?.value).toBe(70);
+
+        // 射程バフ
+        const rangeBuff = character.skills.find(b => b.stat === 'range');
+        expect(rangeBuff).toBeDefined();
+        expect(rangeBuff?.value).toBe(40);
+
+        // 伏兵配置
+        expect(character.ambushInfo).toBeDefined();
+        expect(character.ambushInfo?.maxCount).toBe(2);
     });
 });

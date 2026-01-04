@@ -32,6 +32,7 @@ const createBaseStats = (): Record<Stat, number> => ({
     damage_recovery: 0,
     critical_bonus: 0,
     give_damage: 0,
+    effect_duplicate_attack_speed: 0,
     inspire: 0,
     attack_count: 0,
     enemy_range: 0,

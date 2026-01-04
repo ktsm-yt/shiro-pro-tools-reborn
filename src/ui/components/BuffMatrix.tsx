@@ -60,6 +60,7 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
   {
     key: 'speed', name: '速度系', icon: '💨', stats: [
       { key: 'attack_speed', name: '攻撃速度', icon: '⚡' },
+      { key: 'effect_duplicate_attack_speed', name: '効果重複', icon: '🔄' },
       { key: 'attack_gap', name: '攻撃隙', icon: '⏳' },
       { key: 'enemy_movement', name: '敵移動', icon: '🐢' },
       { key: 'enemy_retreat', name: '敵後退', icon: '↩' },
@@ -77,7 +78,7 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
 const PERCENT_STATS = new Set<Stat>([
   'attack', 'defense', 'range',
   'damage_dealt', 'give_damage', 'damage_taken', 'enemy_damage_taken', 'damage_recovery', 'critical_bonus',
-  'effect_duplicate_attack', 'effect_duplicate_defense', 'effect_duplicate_range',  // 効果重複
+  'effect_duplicate_attack', 'effect_duplicate_defense', 'effect_duplicate_range', 'effect_duplicate_attack_speed',  // 効果重複
   'attack_speed', 'attack_gap',
   'strategy_cooldown', 'cost_giant',
   'enemy_defense', 'enemy_defense_ignore_percent', 'enemy_attack', 'enemy_movement', 'enemy_range',

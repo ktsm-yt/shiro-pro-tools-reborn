@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, DamageCalculationResult, EnvironmentSettings, DamageBreakdown, Buff, DamageRange } from '../../core/types';
 import { calculateDamage, calculateDamageRange } from '../../core/logic/damageCalculator';
 
@@ -23,7 +23,7 @@ function extractMultipliersFromText(texts: string[], source: 'skill' | 'strategy
     const results: MultiplierInfo[] = [];
     const patterns = [
         // 「与えるダメージ1.5倍」
-        { regex: /与えるダメージ(?:が)?(\d+(?:\.\d+)?)倍/, getCondition: (text: string, match: RegExpExecArray) => {
+        { regex: /与える\s*ダメージ(?:が)?(\d+(?:\.\d+)?)倍/, getCondition: (text: string, match: RegExpExecArray) => {
             // 前後のコンテキストから条件を抽出
             const before = text.slice(0, match.index);
             if (/耐久\d+%以下/.test(before)) return before.match(/耐久(\d+)%以下/)?.[0] || '';
@@ -209,7 +209,7 @@ function PhaseDetail({
             <div>
                 <div className="text-green-400 font-medium mb-1">Phase 4: 与ダメ・被ダメ</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
-                    <span>与ダメ</span><span className="text-right">+{breakdown.phase4.damageDealt.toFixed(1)}%</span>
+                            <span>与ダメ</span><span className="text-right">+{breakdown.phase4.damageDealt.toFixed(1)}%</span>
                     <span>被ダメ</span><span className="text-right">+{breakdown.phase4.damageTaken.toFixed(1)}%</span>
                     <span className="font-bold text-white">結果</span><span className="text-right font-bold text-white">{fmt(breakdown.phase4.damage)}</span>
                 </div>
@@ -230,8 +230,24 @@ function PhaseDetail({
             <div>
                 <div className="text-yellow-400 font-medium mb-1">DPS計算</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
-                    <span>攻撃フレーム</span><span className="text-right">{breakdown.dps.attackFrames.toFixed(1)}F</span>
-                    <span>隙フレーム</span><span className="text-right">{breakdown.dps.gapFrames.toFixed(1)}F</span>
+                    <span>攻撃フレーム</span>
+                    <span className="text-right">
+                        {breakdown.dps.attackFrames.toFixed(1)}F
+                        {breakdown.dps.attackSpeedMultiplier > 1 && (
+                            <span className="text-cyan-400 ml-1">
+                                ({(breakdown.dps.attackSpeedMultiplier * 100).toFixed(0)}%)
+                            </span>
+                        )}
+                    </span>
+                    <span>隙フレーム</span>
+                    <span className="text-right">
+                        {breakdown.dps.gapFrames.toFixed(1)}F
+                        {breakdown.dps.gapReductionPercent > 0 && (
+                            <span className="text-cyan-400 ml-1">
+                                ({breakdown.dps.gapReductionPercent.toFixed(0)}%短縮)
+                            </span>
+                        )}
+                    </span>
                     <span>合計</span><span className="text-right">{breakdown.dps.totalFrames.toFixed(1)}F</span>
                     <span>攻撃/秒</span><span className="text-right">{breakdown.dps.attacksPerSecond.toFixed(2)}</span>
                     <span className="font-bold text-white">DPS</span><span className="text-right font-bold text-yellow-400">{fmt(breakdown.dps.dps)}</span>
@@ -248,6 +264,11 @@ function PhaseDetail({
                             <>
                                 <span>スタック倍率</span><span className="text-right text-yellow-400">×{breakdown.specialAttack.stackMultiplier}</span>
                                 <span>実効倍率</span><span className="text-right text-pink-300">×{breakdown.specialAttack.effectiveMultiplier}</span>
+                            </>
+                        )}
+                        {breakdown.specialAttack.giveDamageMultiplier && (
+                            <>
+                            <span>与えるダメージ倍率</span><span className="text-right text-pink-300">×{breakdown.specialAttack.giveDamageMultiplier.toFixed(2)}</span>
                             </>
                         )}
                         {breakdown.specialAttack.hits > 1 && (
@@ -314,12 +335,7 @@ function PhaseDetail({
                         <span>サイクル時間</span><span className="text-right">{breakdown.strategyDamage.cycleDuration}秒</span>
                         {breakdown.strategyDamage.buffGiveDamage && (
                             <>
-                                <span>効果中与ダメ</span><span className="text-right">×{breakdown.strategyDamage.buffGiveDamage}</span>
-                            </>
-                        )}
-                        {breakdown.strategyDamage.buffAttackSpeed && (
-                            <>
-                                <span>効果中攻撃速度</span><span className="text-right">×{breakdown.strategyDamage.buffAttackSpeed}</span>
+                                <span>効果中与えるダメージ</span><span className="text-right">×{breakdown.strategyDamage.buffGiveDamage}</span>
                             </>
                         )}
                         {breakdown.strategyDamage.buffedDps && (
@@ -340,7 +356,6 @@ function PhaseDetail({
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
                         <span>持続時間</span><span className="text-right">{breakdown.abilityMode.duration}秒</span>
                         <span>CT</span><span className="text-right">{breakdown.abilityMode.cooldown}秒</span>
-                        <span>発動率</span><span className="text-right">{(breakdown.abilityMode.uptime * 100).toFixed(0)}%</span>
                         <div className="col-span-2 border-t border-gray-700/50 mt-2 pt-2"></div>
                         <span className="text-amber-300">置換攻撃</span>
                         <span className="text-right text-amber-300">
@@ -348,7 +363,7 @@ function PhaseDetail({
                         </span>
                         {breakdown.abilityMode.giveDamage && breakdown.abilityMode.giveDamage > 0 && (
                             <>
-                                <span>与ダメ</span><span className="text-right">+{breakdown.abilityMode.giveDamage}%</span>
+                                <span>与えるダメージ</span><span className="text-right">+{breakdown.abilityMode.giveDamage}%</span>
                             </>
                         )}
                         {breakdown.abilityMode.gapReduction && breakdown.abilityMode.gapReduction > 0 && (
@@ -371,6 +386,7 @@ function PhaseDetail({
 }
 
 export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharacter }: DamageDetailModalProps) {
+    const modalRef = useRef<HTMLDivElement>(null);
     // モバイル用タブ状態
     const [mobileTab, setMobileTab] = useState<'summary' | 'detail'>('summary');
 
@@ -387,6 +403,14 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
         duration: character.abilityMode?.duration ?? 60,
         cooldown: character.abilityMode?.cooldown ?? 60,
     });
+    const [abilityModeDraft, setAbilityModeDraft] = useState({
+        multiplier: String(character.abilityMode?.replacedAttack.multiplier ?? 2.5),
+        hits: String(character.abilityMode?.replacedAttack.hits ?? 2),
+        giveDamage: String(character.abilityMode?.giveDamage ?? 0),
+        gapReduction: String(character.abilityMode?.gapReduction ?? 0),
+        duration: String(character.abilityMode?.duration ?? 60),
+        cooldown: String(character.abilityMode?.cooldown ?? 60),
+    });
 
     // ESCキーでモーダルを閉じる
     useEffect(() => {
@@ -395,6 +419,22 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
+
+    // モーダル外クリックで閉じる（ヘッダー付近のクリックも拾う）
+    useEffect(() => {
+        const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+            const target = e.target as Node | null;
+            if (!modalRef.current || !target) return;
+            if (modalRef.current.contains(target)) return;
+            onClose();
+        };
+        document.addEventListener('mousedown', handlePointerDown);
+        document.addEventListener('touchstart', handlePointerDown);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('touchstart', handlePointerDown);
+        };
     }, [onClose]);
 
     // cycleN と abilityMode をオーバーライドしたキャラクターを生成
@@ -514,6 +554,52 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
         }
     };
 
+    const abilityModeBounds = {
+        multiplier: { min: 1, max: 10 },
+        hits: { min: 1, max: 5 },
+        giveDamage: { min: 0, max: 200 },
+        gapReduction: { min: 0, max: 99 },
+        duration: { min: 1, max: 120 },
+        cooldown: { min: 1, max: 180 },
+    } as const;
+
+    const parseAbilityModeInput = (value: string) => {
+        if (value.trim() === '') return null;
+        const num = Number(value);
+        return Number.isFinite(num) ? num : null;
+    };
+
+    const clamp = (value: number, min: number, max: number) => {
+        return Math.min(max, Math.max(min, value));
+    };
+
+    const handleAbilityModeDraftChange = <K extends keyof typeof abilityModeSettings>(
+        key: K,
+        rawValue: string
+    ) => {
+        setAbilityModeDraft((prev) => ({ ...prev, [key]: rawValue }));
+        const parsed = parseAbilityModeInput(rawValue);
+        if (parsed !== null) {
+            handleAbilityModeSettingChange(key, parsed as typeof abilityModeSettings[K]);
+        }
+    };
+
+    const handleAbilityModeDraftBlur = <K extends keyof typeof abilityModeSettings>(key: K) => {
+        const rawValue = abilityModeDraft[key];
+        const parsed = parseAbilityModeInput(rawValue);
+        if (parsed === null) {
+            setAbilityModeDraft((prev) => ({ ...prev, [key]: String(abilityModeSettings[key]) }));
+            return;
+        }
+
+        const bounds = abilityModeBounds[key];
+        const clamped = clamp(parsed, bounds.min, bounds.max);
+        if (clamped !== abilityModeSettings[key]) {
+            handleAbilityModeSettingChange(key, clamped as typeof abilityModeSettings[K]);
+        }
+        setAbilityModeDraft((prev) => ({ ...prev, [key]: String(clamped) }));
+    };
+
     // カラム1: 基礎情報（基礎ステータス、倍率、通常DMG/DPS、シナリオ）
     const BasicInfoColumn = (
         <div className="space-y-3">
@@ -524,18 +610,14 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                 </div>
                 <div className="bg-gray-800/40 rounded-lg p-2 border border-gray-700">
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                        <span className="text-gray-400">耐久</span>
+                        <span className="text-right text-white">{character.baseStats.hp ?? '-'}</span>
                         <span className="text-gray-400">攻撃</span>
-                        <span className="text-right text-white font-medium">{character.attack}</span>
-                        <span className="text-gray-400">範囲</span>
-                        <span className="text-right text-white">{character.range}</span>
-                        <span className="text-gray-400">攻撃速度</span>
-                        <span className="text-right text-white">{character.attackFrames}F</span>
-                        {character.element && (
-                            <>
-                                <span className="text-gray-400">属性</span>
-                                <span className="text-right text-white">{character.element}</span>
-                            </>
-                        )}
+                        <span className="text-right text-white font-medium">{character.baseStats.attack ?? '-'}</span>
+                        <span className="text-gray-400">防御</span>
+                        <span className="text-right text-white">{character.baseStats.defense ?? '-'}</span>
+                        <span className="text-gray-400">射程</span>
+                        <span className="text-right text-white">{character.baseStats.range ?? '-'}</span>
                     </div>
                 </div>
             </div>
@@ -725,8 +807,9 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                                     step="0.1"
                                     min="1"
                                     max="10"
-                                    value={abilityModeSettings.multiplier}
-                                    onChange={(e) => handleAbilityModeSettingChange('multiplier', parseFloat(e.target.value) || 1)}
+                                    value={abilityModeDraft.multiplier}
+                                    onChange={(e) => handleAbilityModeDraftChange('multiplier', e.target.value)}
+                                    onBlur={() => handleAbilityModeDraftBlur('multiplier')}
                                     className="w-full px-1.5 py-0.5 bg-gray-800 border border-gray-600 rounded text-xs text-white focus:border-amber-500 focus:outline-none"
                                 />
                             </div>
@@ -737,20 +820,22 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                                     step="1"
                                     min="1"
                                     max="5"
-                                    value={abilityModeSettings.hits}
-                                    onChange={(e) => handleAbilityModeSettingChange('hits', parseInt(e.target.value) || 1)}
+                                    value={abilityModeDraft.hits}
+                                    onChange={(e) => handleAbilityModeDraftChange('hits', e.target.value)}
+                                    onBlur={() => handleAbilityModeDraftBlur('hits')}
                                     className="w-full px-1.5 py-0.5 bg-gray-800 border border-gray-600 rounded text-xs text-white focus:border-amber-500 focus:outline-none"
                                 />
                             </div>
                             <div>
-                                <label className="text-[10px] text-gray-400 block mb-0.5">与ダメ (%)</label>
+                                <label className="text-[10px] text-gray-400 block mb-0.5">与えるダメージ (%)</label>
                                 <input
                                     type="number"
                                     step="1"
                                     min="0"
                                     max="200"
-                                    value={abilityModeSettings.giveDamage}
-                                    onChange={(e) => handleAbilityModeSettingChange('giveDamage', parseInt(e.target.value) || 0)}
+                                    value={abilityModeDraft.giveDamage}
+                                    onChange={(e) => handleAbilityModeDraftChange('giveDamage', e.target.value)}
+                                    onBlur={() => handleAbilityModeDraftBlur('giveDamage')}
                                     className="w-full px-1.5 py-0.5 bg-gray-800 border border-gray-600 rounded text-xs text-white focus:border-amber-500 focus:outline-none"
                                 />
                             </div>
@@ -761,8 +846,9 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                                     step="1"
                                     min="0"
                                     max="99"
-                                    value={abilityModeSettings.gapReduction}
-                                    onChange={(e) => handleAbilityModeSettingChange('gapReduction', parseInt(e.target.value) || 0)}
+                                    value={abilityModeDraft.gapReduction}
+                                    onChange={(e) => handleAbilityModeDraftChange('gapReduction', e.target.value)}
+                                    onBlur={() => handleAbilityModeDraftBlur('gapReduction')}
                                     className="w-full px-1.5 py-0.5 bg-gray-800 border border-gray-600 rounded text-xs text-white focus:border-amber-500 focus:outline-none"
                                 />
                             </div>
@@ -773,8 +859,9 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                                     step="1"
                                     min="1"
                                     max="120"
-                                    value={abilityModeSettings.duration}
-                                    onChange={(e) => handleAbilityModeSettingChange('duration', parseInt(e.target.value) || 1)}
+                                    value={abilityModeDraft.duration}
+                                    onChange={(e) => handleAbilityModeDraftChange('duration', e.target.value)}
+                                    onBlur={() => handleAbilityModeDraftBlur('duration')}
                                     className="w-full px-1.5 py-0.5 bg-gray-800 border border-gray-600 rounded text-xs text-white focus:border-amber-500 focus:outline-none"
                                 />
                             </div>
@@ -785,8 +872,9 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                                     step="1"
                                     min="1"
                                     max="180"
-                                    value={abilityModeSettings.cooldown}
-                                    onChange={(e) => handleAbilityModeSettingChange('cooldown', parseInt(e.target.value) || 1)}
+                                    value={abilityModeDraft.cooldown}
+                                    onChange={(e) => handleAbilityModeDraftChange('cooldown', e.target.value)}
+                                    onBlur={() => handleAbilityModeDraftBlur('cooldown')}
                                     className="w-full px-1.5 py-0.5 bg-gray-800 border border-gray-600 rounded text-xs text-white focus:border-amber-500 focus:outline-none"
                                 />
                             </div>
@@ -817,7 +905,11 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-[#131b2b] border border-gray-700 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div
+                ref={modalRef}
+                className="bg-[#131b2b] border border-gray-700 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* ヘッダー */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700">
                     <div className="flex items-center gap-3">
@@ -829,7 +921,14 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                             />
                         )}
                         <div>
-                            <div className="text-white font-bold">{character.name}</div>
+                            <a
+                                href={`https://scre.swiki.jp/index.php?${character.period ? `［${character.period}］` : ''}${character.name}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-white font-bold hover:text-blue-400 transition-colors"
+                            >
+                                {character.period ? `［${character.period}］${character.name}` : character.name}
+                            </a>
                             <div className="text-xs text-gray-400">{character.weapon}</div>
                         </div>
                     </div>

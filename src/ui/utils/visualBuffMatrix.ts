@@ -81,6 +81,7 @@ export const VISUAL_STAT_KEYS: Stat[] = [
   'enemy_damage_dealt',
   // 速度系
   'attack_speed',
+  'effect_duplicate_attack_speed',  // 攻撃速度効果重複
   'attack_gap',
   'enemy_movement',
   'enemy_retreat',

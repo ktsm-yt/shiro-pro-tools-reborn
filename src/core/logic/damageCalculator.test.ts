@@ -458,7 +458,7 @@ describe('damageCalculator', () => {
             );
         });
 
-        test('複数の与えるダメージ倍率（特殊攻撃 + 通常 + 条件付き）', () => {
+        test('複数の与えるダメージ倍率（特殊攻撃専用は通常攻撃に適用されない）', () => {
             const character = createTestCharacter({
                 baseStats: {
                     attack: 1000,
@@ -469,7 +469,7 @@ describe('damageCalculator', () => {
                         id: 'special-give-damage',
                         stat: 'give_damage',
                         mode: 'percent_max',
-                        value: 30,  // 1.3倍
+                        value: 30,  // 1.3倍（特殊攻撃専用 - 通常攻撃には適用されない）
                         source: 'self_skill',
                         target: 'self',
                         isActive: true,
@@ -479,7 +479,7 @@ describe('damageCalculator', () => {
                         id: 'normal-give-damage',
                         stat: 'give_damage',
                         mode: 'percent_max',
-                        value: 20,  // 1.2倍（最大値ルールで無視される）
+                        value: 20,  // 1.2倍（汎用 - 全攻撃に適用）
                         source: 'self_skill',
                         target: 'self',
                         isActive: true,
@@ -488,12 +488,23 @@ describe('damageCalculator', () => {
                 conditionalGiveDamage: [
                     { rangeThreshold: 1000, multiplier: 2 },  // 2倍
                 ],
+                specialAttack: {
+                    multiplier: 6,
+                    hits: 1,
+                    defenseIgnore: false,
+                    cycleN: 5,
+                },
             });
 
             const result = calculateDamage(character, defaultEnvironment);
 
-            // 1000 × 1.3（特殊攻撃give_damage最大） × 2（条件付き） = 2600
-            expect(result.phase2Damage).toBe(2600);
+            // 通常攻撃Phase2: 1000 × 1.2（汎用give_damage） × 2（条件付き） = 2400
+            // 特殊攻撃専用の1.3倍は通常攻撃には適用されない
+            expect(result.phase2Damage).toBe(2400);
+
+            // 特殊攻撃ダメージ: 1000 × 1.2（汎用） × 1.3（特殊攻撃専用） × 2（条件付き） × 6（倍率）
+            // = 1000 × 1.2 × 1.3 × 2 × 6 = 18720
+            expect(result.breakdown.specialAttack?.damage).toBeCloseTo(18720);
         });
     });
 
@@ -689,6 +700,53 @@ describe('damageCalculator', () => {
             // 特殊攻撃ダメージ = 1200 × 2.5 × 2 = 6000
             expect(result.breakdown.specialAttack!.damage).toBe(6000);
         });
+
+        test('仙台城パターン: 特殊攻撃専用1.3倍 + 汎用1.2倍が正しく適用される', () => {
+            // 仙台城の特技: 「自身の特殊攻撃で与えるダメージが1.3倍」
+            // 仙台城の特殊能力: 「与えるダメージ1.2倍」
+            const character = createTestCharacter({
+                weapon: '刀',
+                baseStats: { attack: 1000, range: 300 },
+            });
+            character.skills = [
+                {
+                    id: 'skill-special-give-damage',
+                    stat: 'give_damage',
+                    value: 30, // 1.3倍 = 30%増加
+                    mode: 'percent_max',
+                    source: 'self_skill',
+                    target: 'self',
+                    isActive: true,
+                    note: '特殊攻撃', // 特殊攻撃専用
+                },
+                {
+                    id: 'ability-general-give-damage',
+                    stat: 'give_damage',
+                    value: 20, // 1.2倍 = 20%増加
+                    mode: 'percent_max',
+                    source: 'special_ability',
+                    target: 'self',
+                    isActive: true,
+                    // note なし = 汎用（全攻撃に適用）
+                },
+            ];
+            // 2.5倍の2連撃
+            character.specialAttack = {
+                multiplier: 2.5,
+                hits: 2,
+                defenseIgnore: false,
+                cycleN: 5,
+            };
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // 通常攻撃のPhase2: 1000 × 1.2（汎用のみ） = 1200
+            // 特殊攻撃専用の1.3倍は通常攻撃には適用されない
+            expect(result.phase2Damage).toBe(1200);
+
+            // 特殊攻撃: 1000 × 1.2（汎用） × 1.3（特殊攻撃専用） × 2.5 × 2連撃
+            // = 1000 × 1.56 × 5 = 7800
+            expect(result.breakdown.specialAttack!.damage).toBe(7800);
+        });
     });
 
     describe('計略ダメージ', () => {
@@ -729,25 +787,26 @@ describe('damageCalculator', () => {
             expect(sd.buffedDps).toBeDefined();
             expect(sd.buffedDps).toBeGreaterThan(result.dps);
 
-            // 刀: attack=19, gap=22
-            // 隙80%短縮: gap = 22 × 0.2 = 4.4
-            // 合計フレーム = 19 + 4.4 = 23.4
-            // 与えるダメージ1.2倍: damage = 1000 × 1.2 = 1200
+            // 計略常時発動前提：攻撃速度・隙短縮は既にnormalDpsに含まれている
+            // buffedDpsでは与ダメージ倍率のみ適用
             // 通常DPS ≈ 1463 (フレーム41で1000ダメージ)
-            // バフDPS ≈ 1463 × 1.2 × (41 / 23.4) ≈ 3077
-            expect(sd.buffedDps).toBeCloseTo(3077, -1); // 10の位で丸め
+            // バフDPS ≈ 1463 × 1.2 ≈ 1756
+            expect(sd.buffedDps).toBeCloseTo(1756, -1); // 10の位で丸め
 
             // 特殊攻撃サイクルDPSが計算されている（5回に1回発動）
             expect(sd.buffedCycleDps).toBeDefined();
-            // バフ効果中の1攻撃ダメージ = buffedDps × (23.4/60) ≈ 1200
-            // 特殊攻撃ダメージ = 1200 × 2.5 × 2 = 6000
-            // サイクル合計 = 4 × 1200 + 6000 = 10800
-            // サイクル時間 = 23.4 × 5 = 117フレーム = 1.95秒
-            // サイクルDPS ≈ 10800 / 1.95 ≈ 5538
-            expect(sd.buffedCycleDps).toBeCloseTo(5538, -2); // 100の位で丸め
+            // 計略常時発動前提でのサイクルDPS計算:
+            // buffedDps = 1756 (normalDps × 1.2)
+            // フレーム時間 = 23.4 (攻撃速度・隙短縮適用後)
+            // 1攻撃ダメージ = 1756 × (23.4/60) ≈ 685
+            // 特殊攻撃ダメージ = 685 × 2.5 × 2 = 3425
+            // サイクル合計 = 4 × 685 + 3425 = 6165
+            // サイクル時間 = 1.95秒
+            // サイクルDPS ≈ 6165 / 1.95 ≈ 3161
+            expect(sd.buffedCycleDps).toBeCloseTo(3161, -2); // 100の位で丸め
         });
 
-        test('隙短縮のみでDPSが上昇する', () => {
+        test('隙短縮のみの場合buffedDpsはnormalDpsと同じ（計略常時発動前提）', () => {
             const character = createTestCharacter({
                 weapon: '刀',
             });
@@ -767,13 +826,11 @@ describe('damageCalculator', () => {
             expect(result.breakdown.strategyDamage).toBeDefined();
             const sd = result.breakdown.strategyDamage!;
 
-            // 刀: attack=19, gap=22, total=41
-            // 隙50%短縮: gap = 22 × 0.5 = 11
-            // 合計フレーム = 19 + 11 = 30
-            // DPS増加率 = 41 / 30 ≈ 1.367
+            // 計略常時発動前提：隙短縮は既にnormalDpsに含まれている
+            // buffedDpsでは追加の乗算なし（与ダメ倍率もないため）
             // 通常DPS ≈ 1463
-            // バフDPS ≈ 1463 × 1.367 ≈ 2000
-            expect(sd.buffedDps).toBeCloseTo(2000, 0);
+            // バフDPS ≈ 1463（同じ）
+            expect(sd.buffedDps).toBeCloseTo(result.dps, 0);
         });
     });
 
