@@ -30,6 +30,7 @@ export interface ParsedBuff {
     unitValue?: number;
     dynamicParameter?: string;
     requiresAmbush?: boolean;
+    benefitsOnlySelf?: boolean;   // 敵デバフだが自分だけが恩恵を受ける（自分のみ）
     confidence?: 'certain' | 'inferred' | 'uncertain';
     inferenceReason?: string;
 }
@@ -153,6 +154,7 @@ function detectDynamicBuff(text: string, value: number): Partial<ParsedBuff> | n
  * 並列表記を展開する
  * 例: "攻撃と防御が30%上昇" → ["攻撃が30%上昇", "防御が30%上昇"]
  * 例: "防御・移動速度が30%低下" → ["防御が30%低下", "移動速度が30%低下"]
+ * 例: "与ダメージ/攻撃速度2.5倍" → ["与ダメージ2.5倍", "攻撃速度2.5倍"]
  */
 function expandParallelStats(line: string): string[] {
     // 鼓舞パターン（自身の攻撃と防御の○%...加算）は展開しない
@@ -161,9 +163,11 @@ function expandParallelStats(line: string): string[] {
     }
 
     // 並列パターンの検出
-    // 注意: 長いパターン（攻撃速度、移動速度）を先に配置すること
-    const statPattern = '攻撃速度|移動速度|攻撃(?:力)?|防御(?:力)?|射程|回復|耐久|与ダメ(?:ージ)?|被ダメ(?:ージ)?';
+    // 注意: 長いパターン（攻撃速度、移動速度、与ダメージ）を先に配置すること
+    const statPattern = '与ダメ(?:ージ)?|被ダメ(?:ージ)?|攻撃速度|移動速度|攻撃(?:力)?|防御(?:力)?|射程|回復|耐久';
     const parallelPatterns = [
+        // 「与ダメージ/攻撃速度」のスラッシュ区切りパターン
+        new RegExp(`(?<stat1>${statPattern})(?:/|／)(?<stat2>${statPattern})(?:/|／)?(?<stat3>${statPattern})?(?:が|を)?`, 'g'),
         // 「攻撃と防御」「攻撃・防御」のパターン
         new RegExp(`(?<stat1>${statPattern})(?:と|・|、)(?<stat2>${statPattern})(?:と|・|、)?(?<stat3>${statPattern})?(?:が|を|の)?`, 'g'),
     ];
@@ -174,8 +178,19 @@ function expandParallelStats(line: string): string[] {
             const stats = [match.groups.stat1, match.groups.stat2, match.groups.stat3].filter(Boolean);
             if (stats.length >= 2) {
                 // 残りの部分（数値や効果など）を抽出
-                const remainder = line.slice(match.index + match[0].length);
+                let remainder = line.slice(match.index + match[0].length);
                 const prefix = line.slice(0, match.index);
+
+                // 未認識のstat（例: "範囲攻撃の範囲"）で始まる場合、数値部分のみを抽出
+                // "範囲攻撃の範囲2倍" → "2倍"
+                const unrecognizedPrefixMatch = remainder.match(/^[^0-9]*?(\d+(?:\.\d+)?(?:倍|[%％]))/);
+                if (unrecognizedPrefixMatch && unrecognizedPrefixMatch.index === 0) {
+                    // 数値部分のみを残す
+                    const valueMatch = remainder.match(/(\d+(?:\.\d+)?(?:倍|[%％]).*)/);
+                    if (valueMatch) {
+                        remainder = valueMatch[1];
+                    }
+                }
 
                 // 各statに対して個別の行を生成
                 return stats.map(stat => {
@@ -190,24 +205,165 @@ function expandParallelStats(line: string): string[] {
     return [line];
 }
 
+// タグ名からConditionTagへのマッピング
+const TAG_TO_CONDITION: Record<string, ConditionTag> = {
+    '絢爛': 'kenran',
+    '夏': 'summer',
+    'ハロウィン': 'halloween',
+    '学園': 'school',
+    '聖夜': 'christmas',
+    '正月': 'new_year',
+    'お月見': 'moon_viewing',
+    '花嫁': 'bride',
+    '水': 'water',
+    '平': 'plain',
+    '山': 'mountain',
+    '平山': 'plain_mountain',
+    '地獄': 'hell',
+};
+
+/**
+ * 条件付きタグバフを抽出
+ * 例: "攻撃40%、［絢爛］城娘は50%上昇" → 50%のkenran条件付きバフ
+ */
+function extractTagConditionalBuffs(line: string, baseBuffs: ParsedBuff[]): ParsedBuff[] {
+    const additionalBuffs: ParsedBuff[] = [];
+
+    // パターン: ［タグ］城娘は○○%上昇 or ［タグ］は○○%
+    const tagPattern = /[［\[]([^\]］]+)[］\]](?:城娘)?(?:は|には)(\d+)[%％]?(?:上昇|増加)?/g;
+    let match;
+
+    while ((match = tagPattern.exec(line)) !== null) {
+        const tagName = match[1];
+        const value = parseInt(match[2]);
+        const conditionTag = TAG_TO_CONDITION[tagName];
+
+        if (!conditionTag) continue;
+
+        // 対応する基本バフを探してクローン
+        for (const baseBuff of baseBuffs) {
+            // 攻撃・防御などのstatに対応するタグ付きバフを生成
+            if (baseBuff.stat === 'attack' || baseBuff.stat === 'defense') {
+                const newBuff: ParsedBuff = {
+                    ...baseBuff,
+                    value,
+                    conditionTags: [conditionTag],
+                    hasCondition: true,
+                    conditionText: match[0],
+                    note: `${tagName}城娘`,
+                };
+                additionalBuffs.push(newBuff);
+                break; // 1つの基本バフに対して1つの条件付きバフ
+            }
+        }
+    }
+
+    return additionalBuffs;
+}
+
+/**
+ * 文ごとの条件タグとターゲットを検出
+ * 「全近接城娘の」→ melee, 「全架空城の」→ fictional
+ */
+interface SentenceContext {
+    conditionTags: ConditionTag[];
+    target: Target | null; // nullの場合はデフォルトのターゲット検出を使う
+    isSelfOnly: boolean;
+}
+
+function splitByRepeatedConditionHeaders(sentence: string): string[] {
+    const headerRegex = /(全?近接(?:城娘)?の|全?遠隔(?:城娘)?の|全?架空(?:城|属性(?:の城娘)?)?の)/g;
+    const matches = Array.from(sentence.matchAll(headerRegex));
+    if (matches.length <= 1) return [sentence];
+
+    const segments: string[] = [];
+    const firstIndex = matches[0]?.index ?? 0;
+    if (firstIndex > 0) {
+        const prefix = sentence.slice(0, firstIndex).trim();
+        if (prefix) segments.push(prefix);
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+        const start = matches[i]?.index ?? 0;
+        const end = i + 1 < matches.length ? (matches[i + 1]?.index ?? sentence.length) : sentence.length;
+        const segment = sentence.slice(start, end).trim();
+        if (segment) segments.push(segment);
+    }
+
+    return segments;
+}
+
+function detectSentenceContext(sentence: string): SentenceContext {
+    const tags: ConditionTag[] = [];
+    let target: Target | null = null;
+    let isSelfOnly = false;
+
+    // 「自身の」で始まる文は自分専用
+    if (/^自身の/.test(sentence.trim())) {
+        isSelfOnly = true;
+        target = 'self';
+    }
+
+    // 「全近接城娘」「近接城娘」
+    if (/全?近接(?:城娘)?の/.test(sentence)) {
+        tags.push('melee');
+        target = 'range'; // 全○○城娘 は射程内対象
+    }
+    // 「全遠隔城娘」「遠隔城娘」
+    if (/全?遠隔(?:城娘)?の/.test(sentence)) {
+        tags.push('ranged');
+        target = 'range';
+    }
+    // 「全架空城」「架空城」「架空属性の城娘」
+    if (/全?架空(?:城|属性(?:の城娘)?)?の/.test(sentence)) {
+        tags.push('fictional');
+        target = 'range';
+    }
+    // 他の属性も追加可能
+
+    return { conditionTags: tags, target, isSelfOnly };
+}
+
 export function parseSkillLine(line: string): ParsedBuff[] {
     // 前処理: 全角→半角、表記揺れ正規化
     const preprocessed = preprocessText(line);
 
-    // 並列表記を展開して各行を処理
-    const expandedLines = expandParallelStats(preprocessed);
+    // 文ごとに分割（。や｡で区切る）
+    const sentences = preprocessed.split(/[。｡]/);
 
     const allResults: ParsedBuff[] = [];
 
-    for (const expandedLine of expandedLines) {
-        const results = parseSkillLineSingle(expandedLine, line);
-        allResults.push(...results);
+    for (const sentence of sentences) {
+        if (!sentence.trim()) continue;
+
+        const segments = splitByRepeatedConditionHeaders(sentence);
+
+        for (const segment of segments) {
+            if (!segment.trim()) continue;
+
+            // この文のコンテキストを検出
+            const sentenceContext = detectSentenceContext(segment);
+
+            // 並列表記を展開して各行を処理
+            const expandedLines = expandParallelStats(segment);
+
+            for (const expandedLine of expandedLines) {
+                const results = parseSkillLineSingle(expandedLine, segment, sentenceContext);
+                allResults.push(...results);
+            }
+        }
     }
+
+    // 条件付きタグバフを追加（「［絢爛］城娘は50%」など）
+    const tagBuffs = extractTagConditionalBuffs(preprocessed, allResults);
+    allResults.push(...tagBuffs);
 
     // 重複除去（展開前の並列パターンで既にマッチしている場合を考慮）
     const unique = new Map<string, ParsedBuff>();
     allResults.forEach(r => {
-        const k = `${r.stat}-${r.target}-${r.value}-${r.mode}-${r.inspireSourceStat ?? ''}`;
+        // conditionTagsも含めてキーを生成
+        const tagKey = r.conditionTags?.join(',') ?? '';
+        const k = `${r.stat}-${r.target}-${r.value}-${r.mode}-${r.inspireSourceStat ?? ''}-${tagKey}`;
         if (!unique.has(k)) {
             unique.set(k, r);
         }
@@ -216,24 +372,40 @@ export function parseSkillLine(line: string): ParsedBuff[] {
     return Array.from(unique.values());
 }
 
-function parseSkillLineSingle(line: string, originalLine: string): ParsedBuff[] {
+function parseSkillLineSingle(line: string, originalLine: string, sentenceContext: SentenceContext = { conditionTags: [], target: null, isSelfOnly: false }): ParsedBuff[] {
     const results: ParsedBuff[] = [];
     const seen = new Set<string>();
     const detectedTarget = detectTarget(line);
     // 効果重複の位置を検出（その位置より前のバフにのみ適用）
-    const duplicateMatch = originalLine.match(/効果重複|同種効果重複|同種効果と重複|重複可|重複可能/);
+    // 「割合重複」も同じく効果重複として扱う
+    const duplicateMatch = originalLine.match(/効果重複|同種効果重複|同種効果と重複|重複可|重複可能|割合重複/);
     const duplicatePosition = duplicateMatch ? originalLine.indexOf(duplicateMatch[0]) : -1;
     const isExplicitlyNonDuplicate = /同種効果の重複無し|重複不可/.test(originalLine);
     const nonStacking = /重複なし/.test(originalLine) || isExplicitlyNonDuplicate;
     const stackPenaltyMatch = originalLine.match(/重複時効果(\d+)%減少/);
     const stackPenalty = stackPenaltyMatch ? Number(stackPenaltyMatch[1]) : undefined;
     const requiresAmbush = /伏兵の射程内/.test(originalLine);
+    // 「(自分のみ)」「（自分のみ）」検出 - 敵デバフだが自分だけが恩恵を受ける
+    const benefitsOnlySelf = /[（(]自分のみ[）)]/.test(originalLine);
     const maxStacksMatch = originalLine.match(/[（(](\d+)回まで[）)]/);
     const maxStacks = maxStacksMatch ? Number(maxStacksMatch[1]) : undefined;
     const stackableTrigger = /(敵撃破(?:毎|ごと)に|巨大化(?:毎|ごと)に|配置(?:毎|ごと)に)/.test(originalLine);
 
-    const conditionTags = extractConditionTags(originalLine);
+    // 文ごとの条件タグと全体の条件タグをマージ
+    const globalConditionTags = extractConditionTags(originalLine);
+    // 自身専用文はグローバルタグを適用しない。文ごとのタグがあればそれを優先。
+    let conditionTags: ConditionTag[];
+    if (sentenceContext.isSelfOnly) {
+        conditionTags = []; // 自身専用なのでタグなし
+    } else if (sentenceContext.conditionTags.length > 0) {
+        conditionTags = sentenceContext.conditionTags;
+    } else {
+        conditionTags = globalConditionTags;
+    }
     const hasCondition = conditionTags.length > 0;
+
+    // 文コンテキストからターゲットを決定（優先順位: sentenceContext.target > pattern.target > detectedTarget）
+    const sentenceTarget = sentenceContext.target;
 
     patterns.forEach((p: ParsedPattern) => {
         let match: RegExpExecArray | null;
@@ -246,7 +418,28 @@ function parseSkillLineSingle(line: string, originalLine: string): ParsedBuff[] 
             if (seen.has(key)) continue;
             seen.add(key);
 
-            const parsedTarget: Target = p.target ?? detectedTarget.target;
+            // ターゲット決定の優先順位: 文コンテキスト > パターン固有 > 検出結果
+            let parsedTarget: Target = sentenceTarget ?? p.target ?? detectedTarget.target;
+
+            // 「自身の」がバフの直前にある場合は target: self に上書き（文コンテキストより優先）
+            const prefixText = line.slice(Math.max(0, match.index - 15), match.index);
+            if (/自身の/.test(prefixText)) {
+                parsedTarget = 'self';
+            }
+            // 「敵に与えるダメージ」は攻撃者（自身）の能力
+            if (p.stat === 'give_damage' && /敵に与える/.test(line.slice(Math.max(0, match.index - 5), match.index + match[0].length))) {
+                parsedTarget = 'self';
+            }
+            // 「攻撃後の隙」は自身の能力（ただし文コンテキストで明示的にrangeの場合は維持）
+            if (p.stat === 'attack_gap' && !sentenceTarget) {
+                parsedTarget = 'self';
+            }
+            // 「(自分のみ)」「（自分のみが対象）」「(最大2.5倍。自分のみ)」などがテキストにある場合は target: self
+            // ただし、敵関連stat（enemy_*）には適用しない
+            const isEnemyStat = p.stat.startsWith('enemy_');
+            if (!isEnemyStat && (/[（(][^）)]*自分(?:のみ)?(?:が対象)?[^）)]*[）)]/.test(originalLine) || /自分のみ/.test(originalLine))) {
+                parsedTarget = 'self';
+            }
 
             const dynamicInfo = detectDynamicBuff(line, value);
 
@@ -275,6 +468,7 @@ function parseSkillLineSingle(line: string, originalLine: string): ParsedBuff[] 
                 stackable: stackableTrigger || Boolean(maxStacks),
                 maxStacks,
                 requiresAmbush: requiresAmbush || /伏兵/.test(match[0]) || dynamicInfo?.dynamicType === 'per_ambush_deployed',
+                benefitsOnlySelf: benefitsOnlySelf || undefined,  // 敵デバフだが自分だけが恩恵を受ける
                 confidence: detectedTarget.confidence,
                 inferenceReason: detectedTarget.inferenceReason,
                 ...dynamicInfo,

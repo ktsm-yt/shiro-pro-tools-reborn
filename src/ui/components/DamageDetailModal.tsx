@@ -1,14 +1,15 @@
-import { useMemo } from 'react';
-import type { Character, DamageCalculationResult, EnvironmentSettings, DamageBreakdown, Buff } from '../../core/types';
-import { calculateDamage } from '../../core/logic/damageCalculator';
+import { useEffect, useMemo, useState } from 'react';
+import type { Character, DamageCalculationResult, EnvironmentSettings, DamageBreakdown, Buff, DamageRange } from '../../core/types';
+import { calculateDamage, calculateDamageRange } from '../../core/logic/damageCalculator';
 
 interface DamageDetailModalProps {
     character: Character;
     baseEnv: EnvironmentSettings;
     onClose: () => void;
+    onUpdateCharacter?: (updated: Character) => void;
 }
 
-const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : Math.floor(n).toLocaleString());
+const fmt = (n: number) => Math.floor(n).toLocaleString();
 
 /** バフからダメージ倍率情報を抽出 */
 interface MultiplierInfo {
@@ -81,10 +82,14 @@ function extractMultipliers(character: Character): MultiplierInfo[] {
     processBuffs(character.strategies || [], 'strategy');
 
     // rawテキストからも抽出（バフで拾えなかった倍率用）
+    // 同じ値の倍率が既にパース済みバフから抽出されている場合はスキップ
     if (character.rawSkillTexts?.length) {
         const fromText = extractMultipliersFromText(character.rawSkillTexts, 'skill');
         for (const m of fromText) {
-            if (!multipliers.some(existing => Math.abs(existing.value - m.value) < 0.01)) {
+            // 同じ値・同じソースの倍率が既にあればスキップ
+            if (!multipliers.some(existing =>
+                Math.abs(existing.value - m.value) < 0.01 && existing.source === m.source
+            )) {
                 multipliers.push(m);
             }
         }
@@ -92,7 +97,10 @@ function extractMultipliers(character: Character): MultiplierInfo[] {
     if (character.rawStrategyTexts?.length) {
         const fromText = extractMultipliersFromText(character.rawStrategyTexts, 'strategy');
         for (const m of fromText) {
-            if (!multipliers.some(existing => Math.abs(existing.value - m.value) < 0.01)) {
+            // 同じ値・同じソースの倍率が既にあればスキップ
+            if (!multipliers.some(existing =>
+                Math.abs(existing.value - m.value) < 0.01 && existing.source === m.source
+            )) {
                 multipliers.push(m);
             }
         }
@@ -120,7 +128,13 @@ function formatConditionTags(tags: string[]): string {
     return tags.map(t => tagLabels[t] || t).join('・');
 }
 
-function PhaseDetail({ breakdown }: { breakdown: DamageBreakdown }) {
+function PhaseDetail({
+    breakdown,
+    onCycleNChange,
+}: {
+    breakdown: DamageBreakdown;
+    onCycleNChange?: (value: number) => void;
+}) {
     return (
         <div className="bg-gray-800/30 text-xs space-y-3 p-4 rounded-xl border border-gray-700">
             {/* Phase 1 */}
@@ -130,6 +144,16 @@ function PhaseDetail({ breakdown }: { breakdown: DamageBreakdown }) {
                     <span>基礎攻撃</span><span className="text-right">{fmt(breakdown.phase1.baseAttack)}</span>
                     <span>割合バフ</span><span className="text-right">+{breakdown.phase1.percentBuffApplied.toFixed(1)}%</span>
                     <span>固定値バフ</span><span className="text-right">+{fmt(breakdown.phase1.flatBuffApplied)}</span>
+                    {breakdown.phase1.flatBuffDetails && breakdown.phase1.flatBuffDetails.length > 0 && (
+                        <div className="col-span-2 pl-4 text-xs text-gray-400">
+                            {breakdown.phase1.flatBuffDetails.map((d, i) => (
+                                <div key={i} className="flex justify-between">
+                                    <span>└ {d.condition}</span>
+                                    <span>+{d.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <span>加算バフ</span><span className="text-right">+{fmt(breakdown.phase1.additiveBuffApplied)}</span>
                     <span>効果重複</span><span className="text-right">+{breakdown.phase1.duplicateBuffApplied.toFixed(1)}%</span>
                     <span className="font-bold text-white">最終攻撃</span><span className="text-right font-bold text-white">{fmt(breakdown.phase1.finalAttack)}</span>
@@ -141,12 +165,26 @@ function PhaseDetail({ breakdown }: { breakdown: DamageBreakdown }) {
                 <div className="text-purple-400 font-medium mb-1">Phase 2: ダメージ倍率</div>
                 <div className="text-gray-300">
                     {breakdown.phase2.multipliers.length > 0 ? (
-                        breakdown.phase2.multipliers.map((m, i) => (
-                            <div key={i} className="flex justify-between">
-                                <span>{m.type}</span>
-                                <span>×{m.value.toFixed(2)}</span>
-                            </div>
-                        ))
+                        breakdown.phase2.multiplierDetails && breakdown.phase2.multiplierDetails.length > 0 ? (
+                            breakdown.phase2.multiplierDetails.map((detail, i) => (
+                                <div key={i}>
+                                    <div className="flex justify-between">
+                                        <span>{detail.type}</span>
+                                        <span>×{detail.value.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-gray-500 text-xs ml-3">
+                                        <span>└ {detail.condition}</span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            breakdown.phase2.multipliers.map((m, i) => (
+                                <div key={i} className="flex justify-between">
+                                    <span>{m.type}</span>
+                                    <span>×{m.value.toFixed(2)}</span>
+                                </div>
+                            ))
+                        )
                     ) : (
                         <span className="text-gray-500">なし</span>
                     )}
@@ -199,22 +237,277 @@ function PhaseDetail({ breakdown }: { breakdown: DamageBreakdown }) {
                     <span className="font-bold text-white">DPS</span><span className="text-right font-bold text-yellow-400">{fmt(breakdown.dps.dps)}</span>
                 </div>
             </div>
+
+            {/* 特殊攻撃 */}
+            {breakdown.specialAttack && (
+                <div>
+                    <div className="text-cyan-400 font-medium mb-1">特殊攻撃</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
+                        <span>倍率</span><span className="text-right">×{breakdown.specialAttack.multiplier}</span>
+                        {breakdown.specialAttack.hits > 1 && (
+                            <>
+                                <span>連撃数</span><span className="text-right text-cyan-300">{breakdown.specialAttack.hits}連撃</span>
+                            </>
+                        )}
+                        <span>防御無視</span><span className="text-right">{breakdown.specialAttack.defenseIgnore ? '✓' : '−'}</span>
+                        {breakdown.specialAttack.rangeMultiplier && (
+                            <>
+                                <span>射程倍率</span><span className="text-right">×{breakdown.specialAttack.rangeMultiplier}</span>
+                            </>
+                        )}
+                        <span>発動周期</span>
+                        <span className="text-right flex items-center justify-end gap-1">
+                            {onCycleNChange ? (
+                                <>
+                                    <button
+                                        onClick={() => onCycleNChange(breakdown.specialAttack!.cycleN - 1)}
+                                        className="w-5 h-5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                                        disabled={breakdown.specialAttack.cycleN <= 1}
+                                    >−</button>
+                                    <span className="w-4 text-center">{breakdown.specialAttack.cycleN}</span>
+                                    <button
+                                        onClick={() => onCycleNChange(breakdown.specialAttack!.cycleN + 1)}
+                                        className="w-5 h-5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                                        disabled={breakdown.specialAttack.cycleN >= 10}
+                                    >+</button>
+                                    <span className="text-gray-500 ml-1">回に1回</span>
+                                </>
+                            ) : (
+                                <>{breakdown.specialAttack.cycleN}回に1回</>
+                            )}
+                        </span>
+                        <span className="font-bold text-white">瞬間ダメージ</span>
+                        <span className="text-right font-bold text-cyan-400">{fmt(breakdown.specialAttack.damage)}</span>
+                        <span className="font-bold text-white">サイクルDPS</span>
+                        <span className="text-right font-bold text-cyan-400">{fmt(breakdown.specialAttack.cycleDps)}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* 計略ダメージ */}
+            {breakdown.strategyDamage && (
+                <div>
+                    <div className="text-pink-400 font-medium mb-1">計略ダメージ</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
+                        <span>攻撃倍率</span><span className="text-right">×{breakdown.strategyDamage.multiplier}</span>
+                        <span>連撃数</span><span className="text-right">×{breakdown.strategyDamage.hits}</span>
+                        {breakdown.strategyDamage.maxMultiplier && (
+                            <>
+                                <span>最大倍率</span><span className="text-right">×{breakdown.strategyDamage.maxMultiplier}</span>
+                            </>
+                        )}
+                        <span>防御無視</span><span className="text-right">{breakdown.strategyDamage.defenseIgnore ? '✓' : '−'}</span>
+                        {breakdown.strategyDamage.rangeMultiplier && (
+                            <>
+                                <span>射程倍率</span><span className="text-right">×{breakdown.strategyDamage.rangeMultiplier}</span>
+                            </>
+                        )}
+                        <span className="font-bold text-white">瞬間ダメージ</span>
+                        <span className="text-right font-bold text-pink-400">{fmt(breakdown.strategyDamage.instantDamage)}</span>
+                        <div className="col-span-2 border-t border-gray-700/50 mt-2 pt-2"></div>
+                        <span>サイクル時間</span><span className="text-right">{breakdown.strategyDamage.cycleDuration}秒</span>
+                        {breakdown.strategyDamage.buffGiveDamage && (
+                            <>
+                                <span>効果中与ダメ</span><span className="text-right">×{breakdown.strategyDamage.buffGiveDamage}</span>
+                            </>
+                        )}
+                        {breakdown.strategyDamage.buffAttackSpeed && (
+                            <>
+                                <span>効果中攻撃速度</span><span className="text-right">×{breakdown.strategyDamage.buffAttackSpeed}</span>
+                            </>
+                        )}
+                        {breakdown.strategyDamage.buffedDps && (
+                            <>
+                                <span>効果中DPS</span><span className="text-right text-pink-300">{fmt(breakdown.strategyDamage.buffedDps)}</span>
+                            </>
+                        )}
+                        <span className="font-bold text-white">サイクルDPS</span>
+                        <span className="text-right font-bold text-pink-400">{fmt(breakdown.strategyDamage.cycleDps)}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* 特殊能力モード（計略発動中の通常攻撃置換） */}
+            {breakdown.abilityMode && (
+                <div>
+                    <div className="text-amber-400 font-medium mb-1">特殊能力モード</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
+                        <span>持続時間</span><span className="text-right">{breakdown.abilityMode.duration}秒</span>
+                        <span>CT</span><span className="text-right">{breakdown.abilityMode.cooldown}秒</span>
+                        <span>発動率</span><span className="text-right">{(breakdown.abilityMode.uptime * 100).toFixed(0)}%</span>
+                        <div className="col-span-2 border-t border-gray-700/50 mt-2 pt-2"></div>
+                        <span className="text-amber-300">置換攻撃</span>
+                        <span className="text-right text-amber-300">
+                            ×{breakdown.abilityMode.replacedAttack.multiplier} ×{breakdown.abilityMode.replacedAttack.hits}連撃
+                        </span>
+                        {breakdown.abilityMode.giveDamage && breakdown.abilityMode.giveDamage > 0 && (
+                            <>
+                                <span>与ダメ</span><span className="text-right">+{breakdown.abilityMode.giveDamage}%</span>
+                            </>
+                        )}
+                        {breakdown.abilityMode.gapReduction && breakdown.abilityMode.gapReduction > 0 && (
+                            <>
+                                <span>隙短縮</span><span className="text-right">-{breakdown.abilityMode.gapReduction}%</span>
+                            </>
+                        )}
+                        <div className="col-span-2 border-t border-gray-700/50 mt-2 pt-2"></div>
+                        <span>発動中DPS</span>
+                        <span className="text-right font-bold text-amber-400">{fmt(breakdown.abilityMode.activeDps)}</span>
+                        <span>非発動DPS</span>
+                        <span className="text-right text-gray-400">{fmt(breakdown.abilityMode.inactiveDps)}</span>
+                        <span className="font-bold text-white">平均DPS</span>
+                        <span className="text-right font-bold text-amber-400">{fmt(breakdown.abilityMode.averageDps)}</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailModalProps) {
+export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharacter }: DamageDetailModalProps) {
+    // cycleN のローカル編集状態
+    const [localCycleN, setLocalCycleN] = useState<number | undefined>(character.specialAttack?.cycleN);
+
+    // abilityMode の手動設定状態
+    const [abilityModeEnabled, setAbilityModeEnabled] = useState(!!character.abilityMode);
+    const [abilityModeSettings, setAbilityModeSettings] = useState({
+        multiplier: character.abilityMode?.replacedAttack.multiplier ?? 2.5,
+        hits: character.abilityMode?.replacedAttack.hits ?? 2,
+        giveDamage: character.abilityMode?.giveDamage ?? 0,
+        gapReduction: character.abilityMode?.gapReduction ?? 0,
+        duration: character.abilityMode?.duration ?? 60,
+        cooldown: character.abilityMode?.cooldown ?? 60,
+    });
+
+    // ESCキーでモーダルを閉じる
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
+
+    // cycleN と abilityMode をオーバーライドしたキャラクターを生成
+    const effectiveCharacter = useMemo(() => {
+        let result = { ...character };
+
+        // specialAttack の cycleN オーバーライド
+        if (character.specialAttack && localCycleN !== undefined) {
+            result = {
+                ...result,
+                specialAttack: {
+                    ...character.specialAttack,
+                    cycleN: localCycleN,
+                },
+            };
+        }
+
+        // abilityMode の適用
+        if (abilityModeEnabled) {
+            result = {
+                ...result,
+                abilityMode: {
+                    replacedAttack: {
+                        multiplier: abilityModeSettings.multiplier,
+                        hits: abilityModeSettings.hits,
+                    },
+                    giveDamage: abilityModeSettings.giveDamage || undefined,
+                    gapReduction: abilityModeSettings.gapReduction || undefined,
+                    duration: abilityModeSettings.duration,
+                    cooldown: abilityModeSettings.cooldown,
+                },
+            };
+        } else {
+            // 無効の場合は削除
+            result = { ...result, abilityMode: undefined };
+        }
+
+        return result;
+    }, [character, localCycleN, abilityModeEnabled, abilityModeSettings]);
+
     // 計算結果
     const result: DamageCalculationResult = useMemo(() => {
-        return calculateDamage(character, baseEnv);
-    }, [character, baseEnv]);
+        return calculateDamage(effectiveCharacter, baseEnv);
+    }, [effectiveCharacter, baseEnv]);
+
+    // ダメージレンジ計算
+    const damageRange: DamageRange = useMemo(() => {
+        return calculateDamageRange(effectiveCharacter, baseEnv);
+    }, [effectiveCharacter, baseEnv]);
 
     // ダメージ倍率と条件を抽出
     const multipliers = useMemo(() => extractMultipliers(character), [character]);
 
+    // cycleN 変更ハンドラ
+    const handleCycleNChange = (newValue: number) => {
+        const clampedValue = Math.max(1, Math.min(10, newValue));
+        setLocalCycleN(clampedValue);
+        // 永続化
+        if (onUpdateCharacter && character.specialAttack) {
+            onUpdateCharacter({
+                ...character,
+                specialAttack: {
+                    ...character.specialAttack,
+                    cycleN: clampedValue,
+                },
+            });
+        }
+    };
+
+    // abilityMode 設定変更ハンドラ
+    const handleAbilityModeToggle = (enabled: boolean) => {
+        setAbilityModeEnabled(enabled);
+        if (onUpdateCharacter) {
+            if (enabled) {
+                onUpdateCharacter({
+                    ...character,
+                    abilityMode: {
+                        replacedAttack: {
+                            multiplier: abilityModeSettings.multiplier,
+                            hits: abilityModeSettings.hits,
+                        },
+                        giveDamage: abilityModeSettings.giveDamage || undefined,
+                        gapReduction: abilityModeSettings.gapReduction || undefined,
+                        duration: abilityModeSettings.duration,
+                        cooldown: abilityModeSettings.cooldown,
+                    },
+                });
+            } else {
+                onUpdateCharacter({
+                    ...character,
+                    abilityMode: undefined,
+                });
+            }
+        }
+    };
+
+    const handleAbilityModeSettingChange = <K extends keyof typeof abilityModeSettings>(
+        key: K,
+        value: typeof abilityModeSettings[K]
+    ) => {
+        const newSettings = { ...abilityModeSettings, [key]: value };
+        setAbilityModeSettings(newSettings);
+        if (onUpdateCharacter && abilityModeEnabled) {
+            onUpdateCharacter({
+                ...character,
+                abilityMode: {
+                    replacedAttack: {
+                        multiplier: newSettings.multiplier,
+                        hits: newSettings.hits,
+                    },
+                    giveDamage: newSettings.giveDamage || undefined,
+                    gapReduction: newSettings.gapReduction || undefined,
+                    duration: newSettings.duration,
+                    cooldown: newSettings.cooldown,
+                },
+            });
+        }
+    };
+
     return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-[#131b2b] border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
+            <div className="bg-[#131b2b] border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
                 {/* ヘッダー */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
                     <div className="flex items-center gap-3">
@@ -274,7 +567,99 @@ export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailM
                                 <div className="text-2xl font-bold text-yellow-400">{fmt(result.dps)}</div>
                             </div>
                         </div>
+                        {/* 特殊攻撃サマリー */}
+                        {result.specialAttackDamage && result.cycleDps && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-1">特殊攻撃</div>
+                                    <div className="text-xl font-bold text-cyan-400">{fmt(result.specialAttackDamage)}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs text-gray-400 mb-1">サイクルDPS</div>
+                                    <div className="text-xl font-bold text-cyan-400">{fmt(result.cycleDps)}</div>
+                                </div>
+                            </div>
+                        )}
+                        {/* 計略ダメージサマリー */}
+                        {result.strategyDamage && result.strategyCycleDps && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-1">計略ダメージ</div>
+                                    <div className="text-xl font-bold text-pink-400">{fmt(result.strategyDamage)}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs text-gray-400 mb-1">サイクルDPS</div>
+                                    <div className="text-xl font-bold text-pink-400">{fmt(result.strategyCycleDps)}</div>
+                                </div>
+                            </div>
+                        )}
+                        {/* 特殊能力モードサマリー */}
+                        {result.breakdown.abilityMode && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-1">特殊能力発動中</div>
+                                    <div className="text-xl font-bold text-amber-400">{fmt(result.breakdown.abilityMode.activeDps)}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs text-gray-400 mb-1">平均DPS</div>
+                                    <div className="text-xl font-bold text-amber-400">{fmt(result.breakdown.abilityMode.averageDps)}</div>
+                                </div>
+                            </div>
+                        )}
                     </div>
+
+                    {/* ダメージ変動（シナリオ別DPS） */}
+                    {damageRange.scenarios.length > 0 && (
+                        <div>
+                            <div className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-medium">
+                                ダメージ変動（シナリオ別）
+                            </div>
+                            <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700 space-y-3">
+                                {/* ベースDPS */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-24 text-xs text-gray-400">基本</div>
+                                    <div className="flex-1 h-5 bg-gray-700/50 rounded overflow-hidden">
+                                        <div
+                                            className="h-full bg-gray-500 rounded"
+                                            style={{ width: `${(damageRange.base.dps / damageRange.max.dps) * 100}%` }}
+                                        />
+                                    </div>
+                                    <div className="w-20 text-right text-sm font-mono text-gray-300">
+                                        {fmt(damageRange.base.dps)}
+                                    </div>
+                                </div>
+                                {/* 各シナリオ */}
+                                {damageRange.scenarios.map((s, i) => {
+                                    const ratio = (s.result.dps / damageRange.max.dps) * 100;
+                                    const isMax = s.result.dps === damageRange.max.dps;
+                                    return (
+                                        <div key={i} className="flex items-center gap-3">
+                                            <div className="w-24 text-xs text-gray-400">{s.label}</div>
+                                            <div className="flex-1 h-5 bg-gray-700/50 rounded overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded ${isMax ? 'bg-yellow-500' : 'bg-blue-500'}`}
+                                                    style={{ width: `${ratio}%` }}
+                                                />
+                                            </div>
+                                            <div className={`w-20 text-right text-sm font-mono ${isMax ? 'text-yellow-400 font-bold' : 'text-gray-300'}`}>
+                                                {fmt(s.result.dps)}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {/* 変動幅表示 */}
+                                <div className="pt-2 border-t border-gray-700/50 text-xs text-gray-500 flex justify-between">
+                                    <span>変動幅</span>
+                                    <span>
+                                        {fmt(damageRange.base.dps)} ～ {fmt(damageRange.max.dps)}
+                                        <span className="ml-2 text-green-400">
+                                            (+{((damageRange.max.dps / damageRange.base.dps - 1) * 100).toFixed(0)}%)
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* 鼓舞量 */}
                     {result.inspireAmount && (
@@ -286,12 +671,145 @@ export function DamageDetailModal({ character, baseEnv, onClose }: DamageDetailM
                         </div>
                     )}
 
+                    {/* 特殊能力モード手動設定 */}
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="text-xs uppercase tracking-wider text-gray-500 font-medium">
+                                特殊能力モード（攻撃置換）
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={abilityModeEnabled}
+                                    onChange={(e) => handleAbilityModeToggle(e.target.checked)}
+                                    className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-amber-500 focus:ring-amber-500 focus:ring-offset-gray-900"
+                                />
+                                <span className="text-xs text-gray-400">有効</span>
+                            </label>
+                        </div>
+
+                        {abilityModeEnabled && (
+                            <div className="bg-amber-900/20 rounded-xl p-4 border border-amber-700/50 space-y-3">
+                                <div className="text-xs text-amber-300/70 mb-2">
+                                    計略発動中に通常攻撃が特殊攻撃に置き換わるキャラクター用
+                                </div>
+
+                                {/* 置換攻撃設定 */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">攻撃倍率</label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="1"
+                                            max="10"
+                                            value={abilityModeSettings.multiplier}
+                                            onChange={(e) => handleAbilityModeSettingChange('multiplier', parseFloat(e.target.value) || 1)}
+                                            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:border-amber-500 focus:outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">連撃数</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min="1"
+                                            max="5"
+                                            value={abilityModeSettings.hits}
+                                            onChange={(e) => handleAbilityModeSettingChange('hits', parseInt(e.target.value) || 1)}
+                                            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:border-amber-500 focus:outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* バフ効果設定 */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">与ダメ増加 (%)</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min="0"
+                                            max="200"
+                                            value={abilityModeSettings.giveDamage}
+                                            onChange={(e) => handleAbilityModeSettingChange('giveDamage', parseInt(e.target.value) || 0)}
+                                            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:border-amber-500 focus:outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">隙短縮 (%)</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min="0"
+                                            max="99"
+                                            value={abilityModeSettings.gapReduction}
+                                            onChange={(e) => handleAbilityModeSettingChange('gapReduction', parseInt(e.target.value) || 0)}
+                                            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:border-amber-500 focus:outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* 時間設定 */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">持続時間 (秒)</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min="1"
+                                            max="120"
+                                            value={abilityModeSettings.duration}
+                                            onChange={(e) => handleAbilityModeSettingChange('duration', parseInt(e.target.value) || 1)}
+                                            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:border-amber-500 focus:outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400 block mb-1">CT (秒)</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min="1"
+                                            max="180"
+                                            value={abilityModeSettings.cooldown}
+                                            onChange={(e) => handleAbilityModeSettingChange('cooldown', parseInt(e.target.value) || 1)}
+                                            className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-sm text-white focus:border-amber-500 focus:outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* 計算結果プレビュー */}
+                                {result.breakdown.abilityMode && (
+                                    <div className="mt-3 pt-3 border-t border-amber-700/30">
+                                        <div className="grid grid-cols-3 gap-2 text-center">
+                                            <div>
+                                                <div className="text-xs text-gray-500">発動中DPS</div>
+                                                <div className="text-sm font-bold text-amber-400">{fmt(result.breakdown.abilityMode.activeDps)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-gray-500">非発動中DPS</div>
+                                                <div className="text-sm font-bold text-gray-400">{fmt(result.breakdown.abilityMode.inactiveDps)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-gray-500">平均DPS</div>
+                                                <div className="text-sm font-bold text-amber-300">{fmt(result.breakdown.abilityMode.averageDps)}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs text-center text-gray-500 mt-2">
+                                            稼働率: {Math.round(result.breakdown.abilityMode.uptime * 100)}%
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Phase詳細（デフォルトで開く） */}
                     <div>
                         <div className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-medium">
                             Phase詳細
                         </div>
-                        <PhaseDetail breakdown={result.breakdown} />
+                        <PhaseDetail breakdown={result.breakdown} onCycleNChange={character.specialAttack ? handleCycleNChange : undefined} />
                     </div>
                 </div>
             </div>

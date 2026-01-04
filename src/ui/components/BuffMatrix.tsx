@@ -32,8 +32,8 @@ const BUFF_CATEGORIES: { key: string; name: string; icon: string; stats: StatRow
       { key: 'enemy_damage_taken', name: '被ダメ↑', icon: '🔥' },
       { key: 'critical_bonus', name: '直撃', icon: '🎯' },
       { key: 'enemy_defense', name: '敵防御↓', icon: '🔻' },
-      { key: 'enemy_defense_ignore_percent', name: '防御無視', icon: '💢' },
-      { key: 'enemy_defense_ignore_complete', name: '防御貫通', icon: '⚡' },
+      { key: 'enemy_defense_ignore_percent', name: '防御無視%', icon: '💢' },
+      { key: 'enemy_defense_ignore_complete', name: '防御無視', icon: '⚡' },
     ]
   },
   {

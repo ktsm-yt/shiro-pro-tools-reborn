@@ -25,6 +25,7 @@ export function convertToRebornBuff(parsed: ParsedBuff): Omit<Buff, 'id' | 'sour
         unitValue: parsed.unitValue,
         dynamicParameter: parsed.dynamicParameter,
         requiresAmbush: parsed.requiresAmbush,
+        benefitsOnlySelf: parsed.benefitsOnlySelf,
         confidence: parsed.confidence,
         inferenceReason: parsed.inferenceReason,
         note: parsed.note,

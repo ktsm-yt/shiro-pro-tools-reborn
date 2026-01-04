@@ -1,7 +1,7 @@
 import type { Character, DamageCalculationResult, DamageComparison } from '../../core/types';
 import { getWeaponMeta } from '../constants/meta';
 
-const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : Math.floor(n).toString());
+const fmt = (n: number) => Math.floor(n).toLocaleString();
 const fmtFull = (n: number) => Math.floor(n).toLocaleString();
 
 const DiffArrow = ({ before, after }: { before: number; after: number }) => {
@@ -91,6 +91,78 @@ export function CompactCharacterCard({
                     🎺 鼓舞 +{fmtFull(result.inspireAmount)}
                     {hasPrev && prev?.inspireAmount && prev.inspireAmount !== result.inspireAmount && (
                         <span className="text-gray-500 ml-1">(前: +{fmtFull(prev.inspireAmount)})</span>
+                    )}
+                </div>
+            )}
+
+            {/* サイクルDPS・特殊攻撃・計略攻撃の追加表示 */}
+            {(result.cycleDps || result.strategyDamage || result.breakdown?.abilityMode) && (
+                <div className="mt-2 pt-2 border-t border-gray-700/50 space-y-1">
+                    {/* 特殊攻撃サイクルDPS */}
+                    {result.cycleDps && result.cycleDps !== result.dps && (
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] text-gray-500">サイクルDPS</span>
+                            <span className="text-sm font-semibold text-orange-400">{fmt(result.cycleDps)}</span>
+                            {result.breakdown?.specialAttack && (
+                                <span className="text-[10px] text-gray-600">
+                                    ({result.breakdown.specialAttack.cycleN}回に1回)
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* 特殊攻撃ダメージ */}
+                    {result.specialAttackDamage && (
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] text-gray-500">特殊攻撃</span>
+                            <span className="text-sm font-semibold text-pink-400">{fmt(result.specialAttackDamage)}</span>
+                            {result.breakdown?.specialAttack && (
+                                <span className="text-[10px] text-gray-600">
+                                    (×{result.breakdown.specialAttack.multiplier}
+                                    {result.breakdown.specialAttack.hits > 1 && ` ×${result.breakdown.specialAttack.hits}連`}
+                                    {result.breakdown.specialAttack.defenseIgnore && ' 防無'})
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* 計略攻撃 */}
+                    {result.strategyDamage && (
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] text-gray-500">計略攻撃</span>
+                            <span className="text-sm font-semibold text-cyan-400">{fmt(result.strategyDamage)}</span>
+                            {result.breakdown?.strategyDamage && (
+                                <span className="text-[10px] text-gray-600">
+                                    (×{result.breakdown.strategyDamage.multiplier}
+                                    {result.breakdown.strategyDamage.hits > 1 && ` ×${result.breakdown.strategyDamage.hits}連`}
+                                    {result.breakdown.strategyDamage.defenseIgnore && ' 防無'})
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* 計略サイクルDPS */}
+                    {result.strategyCycleDps && (
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] text-gray-500">計略DPS</span>
+                            <span className="text-sm font-semibold text-cyan-300">{fmt(result.strategyCycleDps)}</span>
+                            {result.breakdown?.strategyDamage && (
+                                <span className="text-[10px] text-gray-600">
+                                    (/{result.breakdown.strategyDamage.cycleDuration}秒)
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* 能力モード平均DPS */}
+                    {result.breakdown?.abilityMode && (
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] text-gray-500">能力DPS</span>
+                            <span className="text-sm font-semibold text-amber-400">{fmt(result.breakdown.abilityMode.averageDps)}</span>
+                            <span className="text-[10px] text-gray-600">
+                                (発動{Math.round(result.breakdown.abilityMode.uptime * 100)}%)
+                            </span>
+                        </div>
                     )}
                 </div>
             )}

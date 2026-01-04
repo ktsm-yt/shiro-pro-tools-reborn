@@ -96,6 +96,7 @@ export type ConditionTag =
     | 'mountain'
     | 'plain_mountain'
     | 'hell'
+    | 'fictional'
     // 季節属性条件（優先度: MEDIUM）
     | 'summer'
     | 'kenran'
@@ -152,6 +153,7 @@ export interface Buff {
     unitValue?: number;         // 単位あたり効果値
     dynamicParameter?: string;  // 動的条件の説明
     requiresAmbush?: boolean;   // 伏兵依存
+    benefitsOnlySelf?: boolean; // 敵デバフだが自分だけが恩恵を受ける（自分のみ）
     confidence?: 'certain' | 'inferred' | 'uncertain';
     inferenceReason?: string;
     note?: string;              // 補足情報
@@ -197,6 +199,69 @@ export interface Character {
         };
     };
     multiHit?: number; // 連撃数
+
+    // 特殊攻撃情報
+    specialAttack?: {
+        multiplier: number;      // 攻撃の何倍か（例: 6 = 攻撃の6倍）
+        hits: number;            // 連撃数（例: 2 = 2連続攻撃）
+        defenseIgnore: boolean;  // 防御無視
+        cycleN: number;          // N回に1回発動（デフォルト: 3）
+        rangeMultiplier?: number; // 射程倍率（例: 1.3 = 1.3倍の射程で）
+    };
+
+    // 射程→攻撃変換（[竜焔]仙台城など）
+    // 後方互換: boolean (true) または { enabled, threshold } をサポート
+    rangeToAttack?: boolean | {
+        enabled: boolean;        // 射程の値を攻撃に加算
+        threshold?: number;      // 発動条件（射程がこの値以上の場合のみ、例: 1000）
+    };
+
+    // 条件付き与えるダメージ（Phase 2）
+    // 例: 「射程が1000以上の場合与えるダメージが2倍」
+    conditionalGiveDamage?: {
+        rangeThreshold: number;  // 射程条件（この値以上で発動）
+        multiplier: number;      // ダメージ倍率（例: 2 = 2倍）
+    }[];
+
+    // 伏兵配置情報（千賀地氏城など）
+    ambushInfo?: {
+        maxCount: number;               // 配置可能な伏兵数（例: 2）
+        attackMultiplier?: number;      // 伏兵1体あたり攻撃倍率（例: 1.4）
+        attackSpeedMultiplier?: number; // 伏兵1体あたり攻撃速度倍率（例: 1.4）
+        isMultiplicative: boolean;      // true: 1.4^n（累乗）, false: 1+0.4*n（加算）
+    };
+
+    // 計略ダメージ情報（計略発動時の攻撃）
+    strategyDamage?: {
+        multiplier: number;        // 攻撃の何倍か（例: 2）
+        hits: number;              // 連撃数（例: 5）
+        maxMultiplier?: number;    // HP依存等の最大倍率（例: 2.5）
+        defenseIgnore: boolean;    // 防御無視
+        rangeMultiplier?: number;  // 射程倍率（例: 1.5）
+        cycleDuration: number;     // サイクル時間（秒）（例: 10）
+        // 効果時間中のバフ
+        buffDuration?: number;       // バフ持続時間（秒）
+        buffGiveDamage?: number;     // 与えるダメージ倍率（Phase 2乗算、例: 1.3 = 130%）
+        buffDamageDealt?: number;    // 与ダメ倍率（Phase 4最大値、例: 2.5 = 250% = +150%）
+        buffAttackSpeed?: number;    // 攻撃速度倍率（例: 2.5）
+        buffAttackGap?: number;      // 攻撃後の隙短縮（%、例: 80 = 80%短縮）
+    };
+
+    // 特殊能力モード（計略発動中の通常攻撃置換）
+    // 例: ［竜焔］仙台城の「60秒間2.5倍×2連、与ダメ1.2倍、隙80%短縮」
+    abilityMode?: {
+        // 置換攻撃
+        replacedAttack: {
+            multiplier: number;      // 攻撃の何倍か（例: 2.5）
+            hits: number;            // 連撃数（例: 2）
+        };
+        // バフ効果（発動中のみ適用、特殊攻撃にも適用される）
+        giveDamage?: number;         // 与えるダメージ倍率（%）例: 20 = 1.2倍（Phase 2）
+        gapReduction?: number;       // 隙短縮率（%）例: 80
+        // 時間設定
+        duration: number;            // 持続時間（秒）
+        cooldown: number;            // CT（秒）
+    };
 }
 
 /**
@@ -275,6 +340,9 @@ export interface EnvironmentSettings {
 
     // 条件設定
     enemyHpPercent: number;        // 敵HP% (条件付きバフ用)
+
+    // 伏兵配置
+    currentAmbushCount?: number;   // 現在の伏兵配置数（デフォルト: 最大数）
 }
 
 /**
@@ -321,12 +389,20 @@ export interface DamageBreakdown {
         baseAttack: number;
         percentBuffApplied: number;
         flatBuffApplied: number;
+        flatBuffDetails: Array<{ value: number; condition: string }>;
         additiveBuffApplied: number;
         duplicateBuffApplied: number;
         finalAttack: number;
     };
     phase2: {
         multipliers: Array<{ type: string; value: number }>;
+        multiplierDetails?: Array<{
+            type: string;
+            value: number;
+            condition: string;
+            unitValue?: number;
+            count?: number;
+        }>;
         damage: number;
     };
     phase3: {
@@ -350,6 +426,46 @@ export interface DamageBreakdown {
         attacksPerSecond: number;
         dps: number;
     };
+    specialAttack?: {
+        multiplier: number;
+        hits: number;            // 連撃数
+        defenseIgnore: boolean;
+        cycleN: number;
+        rangeMultiplier?: number; // 射程倍率
+        damage: number;          // 特殊攻撃の瞬間ダメージ（連撃込み）
+        cycleDps: number;        // Nサイクル加重平均DPS
+    };
+    strategyDamage?: {
+        multiplier: number;       // 攻撃倍率
+        hits: number;             // 連撃数
+        maxMultiplier?: number;   // 最大倍率（HP依存等）
+        defenseIgnore: boolean;   // 防御無視
+        rangeMultiplier?: number; // 射程倍率
+        cycleDuration: number;    // サイクル時間（秒）
+        instantDamage: number;    // 瞬間ダメージ（連撃後）
+        cycleDps: number;         // サイクルDPS
+        buffedDps?: number;        // バフ効果中DPS
+        buffedCycleDps?: number;   // バフ効果中の特殊攻撃サイクルDPS
+        buffDuration?: number;     // バフ持続時間
+        buffGiveDamage?: number;   // 与えるダメージ倍率（Phase 2）
+        buffDamageDealt?: number;  // 与ダメ倍率（Phase 4）
+        buffAttackSpeed?: number;  // 攻撃速度倍率
+        buffAttackGap?: number;    // 攻撃後の隙短縮（%）
+    };
+    // 特殊能力モード（計略発動中の通常攻撃置換）
+    abilityMode?: {
+        // 設定値
+        replacedAttack: { multiplier: number; hits: number };
+        giveDamage?: number;       // 与ダメ倍率（%）
+        gapReduction?: number;     // 隙短縮（%）
+        duration: number;          // 持続時間（秒）
+        cooldown: number;          // CT（秒）
+        // 計算結果
+        activeDps: number;         // 発動中DPS（置換攻撃+特殊攻撃サイクル）
+        inactiveDps: number;       // 非発動中DPS（通常攻撃+特殊攻撃サイクル）
+        averageDps: number;        // 平均DPS（時間加重）
+        uptime: number;            // 発動率（0-1）
+    };
 }
 
 /**
@@ -367,6 +483,14 @@ export interface DamageCalculationResult {
 
     // DPS
     dps: number;
+
+    // 特殊攻撃（該当キャラのみ）
+    specialAttackDamage?: number;  // 特殊攻撃の瞬間ダメージ
+    cycleDps?: number;             // Nサイクル加重平均DPS
+
+    // 計略ダメージ（該当キャラのみ）
+    strategyDamage?: number;       // 計略発動時の瞬間ダメージ
+    strategyCycleDps?: number;     // 計略サイクルDPS
 
     // 鼓舞量（該当キャラのみ）
     inspireAmount?: number;
@@ -390,6 +514,45 @@ export interface DamageComparison {
         dpsPercent: number;
         inspireAmount?: number;
     };
+}
+
+/**
+ * ダメージ変動シナリオ
+ */
+export type DamageScenario =
+    | 'base'              // 条件なし
+    | 'enemy_hp_100'      // 敵HP100%
+    | 'enemy_hp_50'       // 敵HP50%
+    | 'enemy_hp_30'       // 敵HP30%
+    | 'enemy_hp_1'        // 敵HP1%（最大倍率）
+    | 'strategy_active'   // 計略発動中
+    | 'max_stacks';       // 最大スタック時
+
+/**
+ * 条件付きダメージ倍率
+ */
+export interface ConditionalMultiplier {
+    value: number;
+    condition: string;          // 表示用条件名
+    scenario: DamageScenario;   // シナリオタグ
+    source: 'skill' | 'strategy';
+    isHpDependent?: boolean;    // HP依存スケーリング
+    hpThreshold?: number;       // HP閾値（%）
+    maxMultiplier?: number;     // HP依存時の最大倍率
+}
+
+/**
+ * ダメージレンジ（変動幅）
+ */
+export interface DamageRange {
+    base: DamageCalculationResult;     // 条件なし
+    max: DamageCalculationResult;      // 全条件発動
+    scenarios: {
+        scenario: DamageScenario;
+        label: string;
+        result: DamageCalculationResult;
+    }[];
+    conditionalMultipliers: ConditionalMultiplier[];
 }
 
 /**

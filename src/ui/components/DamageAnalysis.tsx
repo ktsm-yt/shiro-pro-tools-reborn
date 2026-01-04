@@ -10,9 +10,10 @@ interface DamageAnalysisProps {
     env: EnvironmentSettings;
     onCharClick: (char: Character) => void;
     onRemove: (charId: string) => void;
+    onUpdateCharacter?: (updated: Character) => void;
 }
 
-const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : Math.floor(n).toString());
+const fmt = (n: number) => Math.floor(n).toLocaleString();
 
 export function DamageAnalysis({
     characters,
@@ -21,6 +22,7 @@ export function DamageAnalysis({
     env,
     onCharClick,
     onRemove,
+    onUpdateCharacter,
 }: DamageAnalysisProps) {
     const [modalChar, setModalChar] = useState<Character | null>(null);
     const activeChars = characters;
@@ -28,6 +30,13 @@ export function DamageAnalysis({
     const handleShowDetails = (char: Character) => {
         setModalChar(char);
         onCharClick(char);
+    };
+
+    const handleUpdateCharacter = (updated: Character) => {
+        // モーダル内のキャラクター状態を更新
+        setModalChar(updated);
+        // 親に伝播
+        onUpdateCharacter?.(updated);
     };
 
     const totalDPS = Object.values(results).reduce((sum, r) => sum + (r?.dps || 0), 0);
@@ -83,6 +92,7 @@ export function DamageAnalysis({
                     character={modalChar}
                     baseEnv={env}
                     onClose={() => setModalChar(null)}
+                    onUpdateCharacter={handleUpdateCharacter}
                 />
             )}
         </div>

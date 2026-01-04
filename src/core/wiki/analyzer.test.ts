@@ -296,6 +296,16 @@ describe('analyzeBuffText', () => {
             expect(result[0].value).toBeCloseTo(30, 5); // 1.3 - 1 = 0.3 = 30%
             expect(result[0].target).toBe('ally'); // 「対象」= ally
         });
+
+        it('should split repeated condition headers (近接/架空) into separate buffs', () => {
+            const text = '全近接城娘の攻撃が120上昇、与ダメージが50%上昇、全架空城の攻撃が120上昇、与ダメージが1.7倍';
+            const result = analyzeBuffText(text);
+
+            const attackFlats = result.filter(b => b.stat === 'attack' && b.mode === 'flat_sum' && b.value === 120);
+            expect(attackFlats).toHaveLength(2);
+            expect(attackFlats.some(b => b.conditionTags?.includes('melee'))).toBe(true);
+            expect(attackFlats.some(b => b.conditionTags?.includes('fictional'))).toBe(true);
+        });
     });
 });
 
@@ -457,6 +467,75 @@ describe('analyzeCharacter', () => {
         expect(defeatBonus?.mode).toBe('flat_sum');
         expect(defeatBonus?.source).toBe('special_ability');
         expect(defeatBonus?.target).toBe('range');
+    });
+
+    it('should detect rangeToAttack and conditionalGiveDamage from skill text (竜焔仙台城)', () => {
+        const rawData: RawCharacterData = {
+            name: '[竜焔]仙台城',
+            url: 'http://example.com',
+            weapon: '銃',
+            attributes: ['平'],
+            baseStats: {
+                attack: 1000,
+                range: 648,
+            },
+            skillTexts: [
+                '自身の特殊攻撃で与えるダメージが1.3倍。射程が100上昇、自身の射程の値を攻撃に加算。自身の射程が1000以上の場合与えるダメージが2倍',
+            ],
+            strategyTexts: [],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 射程→攻撃変換（閾値なし - 「射程の値を攻撃に加算」は常時発動）
+        expect(character.rangeToAttack).toEqual({ enabled: true, threshold: undefined });
+        // 条件付き与えるダメージ（射程1000以上で2倍）
+        expect(character.conditionalGiveDamage).toEqual([{ rangeThreshold: 1000, multiplier: 2 }]);
+        // 射程+100バフも認識されているか確認
+        const rangeBuff = character.skills.find(b => b.stat === 'range' && b.mode === 'flat_sum');
+        expect(rangeBuff).toBeDefined();
+        expect(rangeBuff?.value).toBe(100);
+        // 特殊攻撃の与えるダメージ1.3倍も検出
+        const specialGiveDamage = character.skills.find(
+            b => b.stat === 'give_damage' && b.note === '特殊攻撃'
+        );
+        expect(specialGiveDamage).toBeDefined();
+        expect(specialGiveDamage?.value).toBeCloseTo(30); // 1.3倍 = 30%
+    });
+
+    it('should detect rangeToAttack without threshold', () => {
+        const rawData: RawCharacterData = {
+            name: '仮キャラ',
+            url: 'http://example.com',
+            weapon: '銃',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: [
+                '自身の射程の値を攻撃に加算',
+            ],
+            strategyTexts: [],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        // 射程→攻撃変換のみ（閾値なし）
+        expect(character.rangeToAttack).toEqual({ enabled: true, threshold: undefined });
+    });
+
+    it('should not set rangeToAttack if pattern not present', () => {
+        const rawData: RawCharacterData = {
+            name: '通常城娘',
+            url: 'http://example.com',
+            weapon: '刀',
+            attributes: ['平'],
+            baseStats: {},
+            skillTexts: ['攻撃力+30%'],
+            strategyTexts: [],
+        };
+
+        const character = analyzeCharacter(rawData);
+
+        expect(character.rangeToAttack).toBeUndefined();
     });
 
     // 他 stat は今後の拡張で追加
@@ -627,5 +706,131 @@ describe('気関連パターン', () => {
             mode: 'flat_sum',
             value: 2,
         });
+    });
+});
+
+describe('伏兵配置（千賀地氏城など）', () => {
+    it('should parse ambush placement with multiplicative stacking', () => {
+        const raw: RawCharacterData = {
+            name: '千賀地氏城',
+            weapon: '投剣',
+            attributes: ['平'],
+            baseStats: { attack: 1000, defense: 100, range: 300 },
+            strategyTexts: [
+                '敵に狙われない伏兵を配置（2体まで）。自身の1.4倍の攻撃で敵4体に攻撃。配置中、自身の攻撃と攻撃速度が40%上昇（同種効果と重複）',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        expect(character.ambushInfo).toBeDefined();
+        expect(character.ambushInfo?.maxCount).toBe(2);
+        expect(character.ambushInfo?.attackMultiplier).toBe(1.4);
+        expect(character.ambushInfo?.attackSpeedMultiplier).toBe(1.4);
+        expect(character.ambushInfo?.isMultiplicative).toBe(true);
+    });
+
+    it('should detect ambush placement without stacking buffs', () => {
+        const raw: RawCharacterData = {
+            name: 'テスト城',
+            weapon: '投剣',
+            attributes: ['平'],
+            baseStats: { attack: 1000, defense: 100, range: 300 },
+            strategyTexts: [
+                '伏兵を配置（3体まで）。伏兵は敵2体に攻撃。',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        expect(character.ambushInfo).toBeDefined();
+        expect(character.ambushInfo?.maxCount).toBe(3);
+        expect(character.ambushInfo?.attackMultiplier).toBeUndefined();
+        expect(character.ambushInfo?.isMultiplicative).toBe(false);
+    });
+
+    it('should parse "最大N体配置可能" format (wiki alternate)', () => {
+        const raw: RawCharacterData = {
+            name: '千賀地氏城（絢爛）',
+            weapon: '投剣',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 100, defense: 0, range: 300 },
+            strategyTexts: [
+                '敵から狙われず、本体の1.5倍の攻撃で敵4体に攻撃。最大2体配置可能。配置中、本体の攻撃と攻撃速度が40%上昇',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        expect(character.ambushInfo).toBeDefined();
+        expect(character.ambushInfo?.maxCount).toBe(2);
+        expect(character.ambushInfo?.attackMultiplier).toBe(1.4);
+        expect(character.ambushInfo?.attackSpeedMultiplier).toBe(1.4);
+    });
+});
+
+describe('abilityMode detection', () => {
+    it('should detect abilityMode for ［竜焔］仙台城 pattern', () => {
+        const raw: RawCharacterData = {
+            name: '［竜焔］仙台城',
+            weapon: '刀',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 1000, defense: 100, range: 150 },
+            strategyTexts: [
+                '60秒間自身の攻撃後の隙80%短縮、与えるダメージ1.2倍。自身の攻撃の2.5倍のダメージを与える攻撃を2連続で行う',
+            ],
+            specialAttackTexts: [
+                '敵1体とその周囲に攻撃の6倍のダメージを与え、大きく後退させ、5秒間防御を0にする攻撃を2連続で5回に1回行う',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        // abilityMode が検出されること
+        expect(character.abilityMode).toBeDefined();
+        expect(character.abilityMode?.duration).toBe(60);
+        expect(character.abilityMode?.cooldown).toBe(60);
+        expect(character.abilityMode?.gapReduction).toBe(80);
+        expect(character.abilityMode?.giveDamage).toBe(20); // 1.2倍 = 20%
+        expect(character.abilityMode?.replacedAttack.multiplier).toBe(2.5);
+        expect(character.abilityMode?.replacedAttack.hits).toBe(2);
+
+        // 特殊攻撃も別途検出されること
+        expect(character.specialAttack).toBeDefined();
+        expect(character.specialAttack?.multiplier).toBe(6);
+        expect(character.specialAttack?.hits).toBe(2);
+        expect(character.specialAttack?.cycleN).toBe(5);
+    });
+
+    it('should not detect abilityMode without replaced attack pattern', () => {
+        const raw: RawCharacterData = {
+            name: 'テスト城',
+            weapon: '刀',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 1000, defense: 100, range: 150 },
+            strategyTexts: [
+                '60秒間自身の攻撃後の隙80%短縮、与えるダメージ1.2倍',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        // replacedAttack がないので abilityMode は検出されない
+        expect(character.abilityMode).toBeUndefined();
+    });
+
+    it('should not detect abilityMode for normal cycle special attack', () => {
+        const raw: RawCharacterData = {
+            name: 'テスト城2',
+            weapon: '刀',
+            attributes: ['平'],
+            baseStats: { hp: 0, attack: 1000, defense: 100, range: 150 },
+            specialAttackTexts: [
+                '攻撃の6倍のダメージを与える攻撃を2連続で3回に1回行う',
+            ],
+        };
+        const character = analyzeCharacter(raw);
+
+        // 通常の特殊攻撃のみ
+        expect(character.abilityMode).toBeUndefined();
+        expect(character.specialAttack).toBeDefined();
+        expect(character.specialAttack?.multiplier).toBe(6);
+        expect(character.specialAttack?.hits).toBe(2);
+        expect(character.specialAttack?.cycleN).toBe(3);
     });
 });

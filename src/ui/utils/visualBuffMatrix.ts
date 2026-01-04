@@ -9,6 +9,7 @@ export type VisualBuffSource = {
   isFlat?: boolean;
   isDuplicate?: boolean;
   isSelfOnly?: boolean;      // target='self' のバフか（自分だけに適用）
+  isExcludedFromSelf?: boolean; // exclude_selfタグで自分には適用されないが表示用
   requiresAmbush?: boolean;  // 伏兵条件
   // 動的バフ情報
   isDynamic?: boolean;
@@ -168,6 +169,8 @@ export function buildVisualBuffMatrix(
         const isFlat = buff.mode === 'flat_sum' && flatStats.has(buff.stat);
         const isDuplicate = buff.isDuplicate === true;
         const isSelfOnly = buff.target === 'self';  // target='self' は自分だけに適用
+        // exclude_selfタグで自分には適用されないが、表示用には記録
+        const isExcludedFromSelf = sourceChar.id === targetChar.id && buff.conditionTags?.includes('exclude_self');
         const requiresAmbush = buff.requiresAmbush === true;
         const isDynamic = buff.isDynamic === true;
         const isSelfStackable = selfStackable.has(buff.stat);
@@ -183,8 +186,10 @@ export function buildVisualBuffMatrix(
           }
           cell.maxValue = cell.selfStackValue + cell.strategyStackValue;
         } else if (isFlat) {
-          // 固定値バフ
-          cell.maxFlat = Math.max(cell.maxFlat, effectiveValue);
+          // 固定値バフ（exclude_selfの場合は合計に含めない）
+          if (!isExcludedFromSelf) {
+            cell.maxFlat += effectiveValue;
+          }
           if (type === 'self') cell.hasSelfFlat = true;
           else if (type === 'ally') cell.hasAllyFlat = true;
           else if (type === 'strategy') cell.hasStrategyFlat = true;
@@ -208,6 +213,7 @@ export function buildVisualBuffMatrix(
           isFlat,
           isDuplicate,
           isSelfOnly,
+          isExcludedFromSelf,
           requiresAmbush,
           isDynamic,
           dynamicType: buff.dynamicType,
@@ -236,24 +242,30 @@ export function buildVisualBuffMatrix(
       // shared = 味方にも適用（isSelfOnly=false）、通常バフ
       // selfOnly = 自分だけ（isSelfOnly=true）、通常バフ
       // duplicate = 効果重複バフ（isDuplicate=true）
+      // excluded = exclude_selfで自分には適用されないが表示用に記録
       let sharedMax = 0;          // 味方にも適用される通常バフ
       let selfOnlyMax = 0;        // 自分だけの通常バフ
       let duplicateSum = 0;       // 効果重複バフ（合算）
-      let sharedFlatMax = 0;
-      let selfOnlyFlatMax = 0;
-      let duplicateFlatSum = 0;
+      let sharedFlatSum = 0;      // 味方にも適用される固定値
+      let selfOnlyFlatSum = 0;    // 自分だけの固定値
+      let duplicateFlatSum = 0;   // 効果重複の固定値
+      let excludedFlatSum = 0;    // exclude_selfで除外される固定値（表示用）
 
       cell.sources.forEach((src) => {
         const isSelfOnly = src.isSelfOnly === true;
         const isDup = src.isDuplicate === true;
+        const isExcluded = src.isExcludedFromSelf === true;
 
         if (src.isFlat) {
           if (isDup) {
             duplicateFlatSum += src.value;  // 効果重複は合算
+          } else if (isExcluded) {
+            // exclude_selfは表示用に記録（緑部分）、maxFlatには含めない
+            excludedFlatSum += src.value;
           } else if (isSelfOnly) {
-            selfOnlyFlatMax = Math.max(selfOnlyFlatMax, src.value);
+            selfOnlyFlatSum += src.value;
           } else {
-            sharedFlatMax = Math.max(sharedFlatMax, src.value);
+            sharedFlatSum += src.value;
           }
         } else {
           if (isDup) {
@@ -275,9 +287,14 @@ export function buildVisualBuffMatrix(
       cell.selfExtra = Math.max(0, selfOnlyMax - sharedMax);
 
       // 固定値の3色計算
-      cell.sharedFlat = sharedFlatMax;
+      // 緑: 味方にも適用される分（excludedも含む、表示用ベース）
+      // 青: 自分だけの追加分（selfOnlyがshared+excludedを上回る分）
+      const flatBase = sharedFlatSum + excludedFlatSum;
+      cell.sharedFlat = flatBase;
       cell.duplicateFlat = duplicateFlatSum;
-      cell.selfExtraFlat = Math.max(0, selfOnlyFlatMax - sharedFlatMax);
+      cell.selfExtraFlat = Math.max(0, selfOnlyFlatSum - flatBase);
+      // maxFlatは実際に適用される値（excludedは含まない）
+      cell.maxFlat = sharedFlatSum + duplicateFlatSum + selfOnlyFlatSum;
     });
   });
 

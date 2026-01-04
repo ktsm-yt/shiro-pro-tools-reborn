@@ -164,9 +164,10 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     const skillCandidates: { text: string; header: string }[] = [];
     const strategyCandidates: { text: string; header: string }[] = [];
     const specialCandidates: { text: string; header: string }[] = [];
+    const specialAttackCandidates: { text: string; header: string }[] = [];
 
     const fallbackTable = mainInfoTable ? null : tables[0];
-    let currentSection: 'skill' | 'strategy' | 'special' | null = null;
+    let currentSection: 'skill' | 'strategy' | 'special' | 'special_attack' | null = null;
 
     tables.forEach(table => {
         const isMainInfoTable = mainInfoTable ? table === mainInfoTable : false;
@@ -215,8 +216,8 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
 
             // 武器種
             // ヘッダー・値の両方をチェックする（ヘッダーなしのテーブル対応）
-            const weaponPattern = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札)$/;
-            const weaponPatternLoose = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札)/;
+            const weaponPattern = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札|その他)$/;
+            const weaponPatternLoose = /^(刀|槍|槌|盾|拳|鎌|戦棍|双剣|ランス|弓|石弓|鉄砲|大砲|歌舞|法術|鈴|杖|祓串|本|投剣|鞭|陣貝|茶器|軍船|札|その他)/;
             // 表記揺れの正規化マップ
             const weaponNormalize: Record<string, string> = {
                 '札': '法術',
@@ -270,6 +271,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                     if (cleanText.includes('水') && !attributes.includes('水')) attributes.push('水');
                 }
                 if (cleanText.includes('地獄') && !attributes.includes('地獄')) attributes.push('地獄');
+                if (cleanText.includes('架空') && !attributes.includes('架空')) attributes.push('架空');
 
                 // 無属性判定
                 if (cleanText.includes('無') && attributes.length === 0) {
@@ -279,7 +281,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                 }
             };
 
-            const attrPattern = /(平山|平水|平|山|水|地獄|無属性|無)/;
+            const attrPattern = /(平山|平水|平|山|水|地獄|架空|無属性|無)/;
             const isAttrRow = /属性/.test(header) || /属性/.test(value) || attrPattern.test(header) || attrPattern.test(value) || (!header && !!value);
 
             if (allowWeaponOrAttrParse && !attributesLocked && isAttrRow) {
@@ -355,18 +357,23 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                 if (text === '特技') currentSection = 'skill';
                 else if (text === '計略') currentSection = 'strategy';
                 else if (text === '特殊能力') currentSection = 'special';
-                else if (text === '特殊攻撃') currentSection = null; // 特殊攻撃は無視
+                else if (text === '特殊攻撃') currentSection = 'special_attack';
+                else if (text.length > 1 && !text.startsWith('[')) {
+                    // 他のセクション（図鑑文章など）でリセット
+                    currentSection = null;
+                }
             }
 
-            // 特殊攻撃は除外（特殊能力とは別のセクション）
-            const isSpecialAttack = header.includes('特殊攻撃') || (currentSection === null && header.includes('ストック'));
+            // 特殊攻撃セクションの判定
+            const isSpecialAttack = currentSection === 'special_attack' || header.includes('特殊攻撃') || header.includes('ストック');
 
             // 特技・計略・特殊能力
             // headerに [無印] や [改壱] が含まれる場合、または "特技" "計略" "特殊能力" という単語が含まれる場合
             const isSkillOrStrategy =
                 !isSpecialAttack && (
                     header.includes('[無印]') || header.includes('[改壱]') || header.includes('[改弐]') ||
-                    header.includes('特技') || header.includes('計略') || header.includes('特殊能力') || currentSection === 'special'
+                    header.includes('特技') || header.includes('計略') || header.includes('特殊能力') ||
+                    currentSection === 'special' || currentSection === 'skill' || currentSection === 'strategy'
                 );
 
             if (isSkillOrStrategy) {
@@ -429,6 +436,36 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
                     }
                 }
             }
+
+            // 特殊攻撃テキストの収集
+            // [無印] または [改壱] で始まるヘッダーの行のみ対象
+            const isSpecialAttackRow = isSpecialAttack && value.length > 5 &&
+                (header.startsWith('[無印]') || header.startsWith('[改壱]') || header.startsWith('[改弐]'));
+            if (isSpecialAttackRow) {
+                // 特殊攻撃の説明テキストを抽出（「攻撃の6倍」「防御無視」など）
+                const allTexts: string[] = [];
+                const processCell = (td: Element) => {
+                    const html = td.innerHTML;
+                    const parts = html.split(/<br\s*\/?>/i);
+                    parts.forEach(part => {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = part;
+                        const text = tempDiv.textContent?.trim() || '';
+                        if (text.length >= 3) {
+                            allTexts.push(text);
+                        }
+                    });
+                };
+                if (tds.length > 1) {
+                    processCell(tds[tds.length - 1]);
+                } else if (tds.length === 1) {
+                    processCell(tds[0]);
+                }
+                const combinedText = allTexts.join(' ');
+                if (combinedText.length > 3 && !specialAttackCandidates.some(c => c.text === combinedText)) {
+                    specialAttackCandidates.push({ text: combinedText, header });
+                }
+            }
         });
     });
 
@@ -472,6 +509,8 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
     const skillTexts = pickTexts(skillCandidates);
     const strategyTexts = pickTexts(strategyCandidates);
     const specialTexts = pickTexts(specialCandidates);
+    // 特殊攻撃は改壱を優先しつつ、全テキストを連結
+    const specialAttackTexts = pickTexts(specialAttackCandidates);
 
     return {
         name,
@@ -487,6 +526,7 @@ export function parseWikiHtml(html: string, url: string): RawCharacterData {
         skillTexts: [...new Set(skillTexts)], // 重複排除
         strategyTexts: [...new Set(strategyTexts)], // 重複排除
         specialTexts: [...new Set(specialTexts)],
+        specialAttackTexts: [...new Set(specialAttackTexts)],
         imageUrl,
     };
 }

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Character } from '../../core/types';
-import { loadCharacters, addCharacterToStorage, removeCharacterFromStorage } from '../../core/storage';
+import { loadCharacters, addCharacterToStorage, removeCharacterFromStorage, updateCharacterInStorage } from '../../core/storage';
 
 export function useCharacterStorage() {
     const [savedCharacters, setSavedCharacters] = useState<Character[]>(() => loadCharacters());
@@ -20,9 +20,15 @@ export function useCharacterStorage() {
         setSavedCharacters(updated);
     }, []);
 
+    const updateCharacter = useCallback((char: Character) => {
+        const updated = updateCharacterInStorage(char);
+        setSavedCharacters(updated);
+    }, []);
+
     return {
         savedCharacters,
         addCharacter,
-        removeCharacter
+        removeCharacter,
+        updateCharacter
     };
 }

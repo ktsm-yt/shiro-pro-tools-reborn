@@ -190,6 +190,13 @@ export function RightSidebar({
                                     <EnvField label="防御デバフ (固定)" name="defenseDebuffFlat" defaultValue={env.defenseDebuffFlat} onCommit={handleEnvCommit} />
                                 </div>
                             </div>
+
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 font-medium">動的バフ</div>
+                                <div className="space-y-1">
+                                    <EnvField label="射程内味方数" name="currentAmbushCount" defaultValue={env.currentAmbushCount ?? 0} suffix="体" onCommit={handleEnvCommit} />
+                                </div>
+                            </div>
                         </div>
                     </div>
                 ) : (

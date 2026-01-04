@@ -42,7 +42,9 @@ const NumberInput = memo(function NumberInput({
     }, [defaultValue]);
 
     const commitValue = (raw: string) => {
-        const num = parseFloat(raw);
+        // 空欄の場合は0として扱う
+        const trimmed = raw.trim();
+        const num = trimmed === '' ? 0 : parseFloat(trimmed);
         if (!isNaN(num)) {
             onCommit(num);
             resetValueRef.current = num;
@@ -132,6 +134,7 @@ export const EnvironmentPanel = memo(function EnvironmentPanel({
                 <NumberInput id="env-defense-debuff" label="防デバフ" defaultValue={settings.defenseDebuffPercent ?? 0} suffix="%" onCommit={(v) => handleCommit('defenseDebuffPercent', v)} />
                 <NumberInput id="env-defense-flat" label="防-固定" defaultValue={settings.defenseDebuffFlat ?? 0} onCommit={(v) => handleCommit('defenseDebuffFlat', v)} />
                 <NumberInput id="env-enemy-hp" label="敵HP" defaultValue={settings.enemyHpPercent ?? 0} suffix="%" onCommit={(v) => handleCommit('enemyHpPercent', v)} />
+                <NumberInput id="env-ambush" label="味方数" defaultValue={settings.currentAmbushCount ?? 0} suffix="体" onCommit={(v) => handleCommit('currentAmbushCount', v)} />
             </div>
         </div>
     );
