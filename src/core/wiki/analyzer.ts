@@ -56,8 +56,9 @@ function detectConditionalGiveDamage(texts: string[]): { rangeThreshold: number;
  * 例: "攻撃の6倍の防御無視ダメージ" → { multiplier: 6, defenseIgnore: true, cycleN: 3, hits: 1 }
  * 例: "攻撃の2.5倍のダメージを与える攻撃を2連続で行う" → { multiplier: 2.5, hits: 2 }
  * 例: "1.3倍の射程で" → { rangeMultiplier: 1.3 }
+ * 例: "ダメージと攻撃上昇量が増加（最大3倍）" → { stackMultiplier: 3 }
  */
-function parseSpecialAttackText(texts: string[]): { multiplier: number; hits: number; defenseIgnore: boolean; cycleN: number; rangeMultiplier?: number } | undefined {
+function parseSpecialAttackText(texts: string[]): { multiplier: number; hits: number; defenseIgnore: boolean; cycleN: number; rangeMultiplier?: number; stackMultiplier?: number } | undefined {
     if (!texts || texts.length === 0) return undefined;
 
     const combinedText = texts.join(' ');
@@ -93,7 +94,15 @@ function parseSpecialAttackText(texts: string[]): { multiplier: number; hits: nu
         rangeMultiplier = parseFloat(rangeMatch[1]);
     }
 
-    return { multiplier, hits, defenseIgnore, cycleN, rangeMultiplier };
+    // スタック倍率 パターン（例: "最大3倍" "（最大3倍）"）
+    // ストック消費時の最大倍率を検出
+    let stackMultiplier: number | undefined;
+    const stackMatch = combinedText.match(/[（(]?最大(\d+(?:\.\d+)?)倍[）)]?/);
+    if (stackMatch) {
+        stackMultiplier = parseFloat(stackMatch[1]);
+    }
+
+    return { multiplier, hits, defenseIgnore, cycleN, rangeMultiplier, stackMultiplier };
 }
 
 /**
@@ -370,6 +379,9 @@ function extractStrategyTarget(text: string): Target | null {
 export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isActive'>[] {
     if (!text || text.trim() === '') return [];
 
+    // 効果重複の検出は parseSkillLine 内で位置ベースで行われる
+    // （「攻撃2.5倍(効果重複), 射程1.3倍」のような括弧付きパターンも正しく処理）
+
     // グローバルなターゲット倍率を抽出（「自身に対しては効果○倍」など）
     // これは全文の末尾に出現し、すべてのセンテンスに適用される
     const globalMultiplierMatch = text.match(/(自身|対象|射程内(?:の)?(?:城娘)?|範囲内(?:の)?(?:城娘)?)(?:に対して)?(?:は|には)?効果(\d+(?:\.\d+)?)倍/);
@@ -433,6 +445,10 @@ export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isA
             if (isPerGiantScope && typeof buff.value === 'number') {
                 buff.value = Number((buff.value * 5).toFixed(6));
             }
+
+            // 効果重複の処理は parseSkillLine で位置ベースで行われるため、
+            // ここでの変換は不要（括弧付きの効果重複は直前のバフにのみ適用される）
+
             allBuffs.push(buff);
         });
     }
