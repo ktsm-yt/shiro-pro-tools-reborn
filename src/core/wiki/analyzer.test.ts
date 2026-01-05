@@ -829,6 +829,29 @@ describe('気関連パターン', () => {
         expect(buff.isDuplicate).toBe(true);
         expect(buff.duplicateEfficiency).toBeUndefined();
     });
+
+    // シバルバー: 「攻撃が○倍のダメージを与え」パターン
+    it('should parse "攻撃が3倍のダメージを与え" as give_damage with target=self (シバルバー計略)', () => {
+        const result = analyzeBuffText('攻撃が3倍のダメージを与え');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'give_damage',
+            mode: 'percent_max',
+            value: 200, // 3倍 = 200%
+            target: 'self',
+        });
+    });
+
+    it('should parse "攻撃が1.5倍のダメージ" as give_damage with target=self', () => {
+        const result = analyzeBuffText('攻撃が1.5倍のダメージ');
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+            stat: 'give_damage',
+            mode: 'percent_max',
+            value: 50, // 1.5倍 = 50%
+            target: 'self',
+        });
+    });
 });
 
 describe('伏兵配置（千賀地氏城など）', () => {

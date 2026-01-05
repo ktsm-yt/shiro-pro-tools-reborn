@@ -556,7 +556,7 @@ export function analyzeBuffText(text: string): Omit<Buff, 'id' | 'source' | 'isA
  */
 export function analyzeCharacter(rawData: RawCharacterData): Character {
     const skills: Buff[] = [];
-    const strategies: Buff[] = [];
+    let strategies: Buff[] = [];
     const specials: Buff[] = [];
     const seasonAttributes: string[] = [];
     const periodLabel = rawData.period ?? '';
@@ -601,6 +601,15 @@ export function analyzeCharacter(rawData: RawCharacterData): Character {
                 isActive: true,
             });
         }
+    }
+
+    // 切替計略対応: 同じnoteの give_damage が複数ある場合は最大値のみ保持
+    // 例: シバルバー「攻撃が1.5倍/2倍/3倍のダメージ」→ 3倍のみ使用
+    const attackDamageBuffs = strategies.filter(b => b.stat === 'give_damage' && b.note === '攻撃ダメージ倍率');
+    if (attackDamageBuffs.length > 1) {
+        const maxBuff = attackDamageBuffs.reduce((max, b) => b.value > max.value ? b : max, attackDamageBuffs[0]);
+        // 最大値以外を除去
+        strategies = strategies.filter(b => !(b.stat === 'give_damage' && b.note === '攻撃ダメージ倍率') || b.id === maxBuff.id);
     }
 
     // 特殊能力テキストを解析（特殊能力も常時発動なのでisActive: true）

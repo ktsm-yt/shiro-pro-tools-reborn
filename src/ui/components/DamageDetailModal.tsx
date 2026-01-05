@@ -235,7 +235,7 @@ function PhaseDetail({
                         {breakdown.dps.attackFrames.toFixed(1)}F
                         {breakdown.dps.attackSpeedMultiplier > 1 && (
                             <span className="text-cyan-400 ml-1">
-                                ({(breakdown.dps.attackSpeedMultiplier * 100).toFixed(0)}%)
+                                (+{((breakdown.dps.attackSpeedMultiplier - 1) * 100).toFixed(0)}%)
                             </span>
                         )}
                     </span>
@@ -318,11 +318,6 @@ function PhaseDetail({
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
                         <span>攻撃倍率</span><span className="text-right">×{breakdown.strategyDamage.multiplier}</span>
                         <span>連撃数</span><span className="text-right">×{breakdown.strategyDamage.hits}</span>
-                        {breakdown.strategyDamage.maxMultiplier && (
-                            <>
-                                <span>最大倍率</span><span className="text-right">×{breakdown.strategyDamage.maxMultiplier}</span>
-                            </>
-                        )}
                         <span>防御無視</span><span className="text-right">{breakdown.strategyDamage.defenseIgnore ? '✓' : '−'}</span>
                         {breakdown.strategyDamage.rangeMultiplier && (
                             <>

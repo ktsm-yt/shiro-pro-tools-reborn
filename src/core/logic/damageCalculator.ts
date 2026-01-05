@@ -971,9 +971,33 @@ function calculateStrategyDamage(
         buffAttackGap,
     } = strategyDamage;
 
+    const allBuffs = [
+        ...(character.skills || []),
+        ...(character.strategies || []),
+        ...(character.specialAbilities || []),
+    ];
+
+    // Phase2で既に「最大値」系の与えるダメージが適用されている場合は二重計算を避ける
+    const maxMultiplierAlreadyApplied = maxMultiplier !== undefined && allBuffs.some(buff => {
+        if (buff.stat !== 'give_damage' || buff.isActive === false) return false;
+        if (!buff.note || !buff.note.includes('最大値')) return false;
+        if (buff.conditionTags?.includes('exclude_self')) return false;
+
+        let appliesToSelf = buff.target === 'self' || buff.target === 'all';
+        if (buff.target === 'range' && buff.conditionTags?.length) {
+            if (areConditionsSatisfied(buff.conditionTags, character)) {
+                appliesToSelf = true;
+            }
+        }
+        if (!appliesToSelf) return false;
+
+        const buffMultiplier = buff.mode === 'percent_max' ? (1 + buff.value / 100) : buff.value;
+        return Math.abs(buffMultiplier - maxMultiplier) < 0.001;
+    });
+
     // Phase2: 攻撃倍率と最大倍率を適用
     let damage = phase2Damage * multiplier;
-    if (maxMultiplier) {
+    if (maxMultiplier && !maxMultiplierAlreadyApplied) {
         damage *= maxMultiplier;
     }
 
@@ -985,12 +1009,6 @@ function calculateStrategyDamage(
     }
 
     // Phase 4: 与ダメ・被ダメによる増減
-    const allBuffs = [
-        ...(character.skills || []),
-        ...(character.strategies || []),
-        ...(character.specialAbilities || []),
-    ];
-
     let selfDamageDealt = 0;
     for (const buff of allBuffs) {
         if (buff.stat !== 'damage_dealt' || buff.isActive === false) continue;
@@ -1483,7 +1501,7 @@ function extractConditionalMultipliers(character: Character): ConditionalMultipl
                 multipliers.push({
                     value: parseFloat(hpBelowMatch[2]),
                     condition: `敵HP${threshold}%以下`,
-                    scenario: threshold <= 30 ? 'enemy_hp_30' : 'enemy_hp_50',
+                    scenario: 'enemy_hp_50',
                     source,
                     hpThreshold: threshold,
                 });
@@ -1496,7 +1514,7 @@ function extractConditionalMultipliers(character: Character): ConditionalMultipl
                 multipliers.push({
                     value: parseFloat(hpAboveMatch[2]),
                     condition: `敵HP${threshold}%以上`,
-                    scenario: 'enemy_hp_100',
+                    scenario: 'enemy_hp_90',
                     source,
                     hpThreshold: threshold,
                 });
@@ -1508,7 +1526,7 @@ function extractConditionalMultipliers(character: Character): ConditionalMultipl
                 multipliers.push({
                     value: parseFloat(hpScaleMatch[1]),
                     condition: '敵HP依存（最大）',
-                    scenario: 'enemy_hp_1',
+                    scenario: 'enemy_hp_16',
                     source,
                     isHpDependent: true,
                     maxMultiplier: parseFloat(hpScaleMatch[1]),
@@ -1586,10 +1604,9 @@ function extractConditionalMultipliers(character: Character): ConditionalMultipl
 function getScenarioLabel(scenario: DamageScenario): string {
     const labels: Record<DamageScenario, string> = {
         'base': '基本',
-        'enemy_hp_100': '敵HP100%',
+        'enemy_hp_90': '敵HP90%',
         'enemy_hp_50': '敵HP50%',
-        'enemy_hp_30': '敵HP30%',
-        'enemy_hp_1': '敵HP1%',
+        'enemy_hp_16': '敵HP16%',
         'strategy_active': '計略中',
         'max_stacks': '最大蓄積',
     };
@@ -1603,8 +1620,10 @@ function getScenarioLabel(scenario: DamageScenario): string {
  * @returns 現在の倍率（1.0 ～ maxMultiplier）
  */
 function interpolateHpDamage(hpPercent: number, maxMultiplier: number): number {
-    // HP100%で1倍、HP0%で最大倍率（線形補間）
-    return 1 + (maxMultiplier - 1) * (1 - hpPercent / 100);
+    // 反比例関数: 1 / (a + b * hp)
+    // ダノター城の実測データに基づく係数（maxMultiplier=2.5用）
+    const hp = hpPercent / 100;
+    return 1 / (0.3 + 0.7 * hp);
 }
 
 /**
@@ -1628,6 +1647,12 @@ export function calculateDamageRange(
         if (!scenarioSet.has(mult.scenario) && mult.scenario !== 'base') {
             scenarioSet.add(mult.scenario);
         }
+        // HP依存スケーリングがある場合、全HPシナリオを追加
+        if (mult.isHpDependent) {
+            scenarioSet.add('enemy_hp_90');
+            scenarioSet.add('enemy_hp_50');
+            scenarioSet.add('enemy_hp_16');
+        }
     }
 
     // シナリオごとに計算
@@ -1637,23 +1662,24 @@ export function calculateDamageRange(
 
         // このシナリオで発動する倍率を適用
         for (const mult of conditionalMultipliers) {
-            if (mult.scenario === scenario) {
-                if (mult.isHpDependent && mult.maxMultiplier) {
-                    // HP依存: シナリオに応じたHP%で補間
-                    const hpPercent = scenario === 'enemy_hp_1' ? 1 :
-                                     scenario === 'enemy_hp_30' ? 30 :
-                                     scenario === 'enemy_hp_50' ? 50 : 100;
+            // HP依存スケーリング: 全HPシナリオで適用
+            if (mult.isHpDependent && mult.maxMultiplier) {
+                const isHpScenario = scenario === 'enemy_hp_16' || scenario === 'enemy_hp_50' || scenario === 'enemy_hp_90';
+                if (isHpScenario) {
+                    const hpPercent = scenario === 'enemy_hp_16' ? 16 :
+                                     scenario === 'enemy_hp_50' ? 50 : 90;
                     additionalMultiplier *= interpolateHpDamage(hpPercent, mult.maxMultiplier);
-                } else {
-                    additionalMultiplier *= mult.value;
                 }
+            }
+            // 通常の条件付き倍率
+            else if (mult.scenario === scenario) {
+                additionalMultiplier *= mult.value;
             }
             // HP閾値条件のチェック
             else if (mult.hpThreshold) {
-                const scenarioHp = scenario === 'enemy_hp_1' ? 1 :
-                                  scenario === 'enemy_hp_30' ? 30 :
+                const scenarioHp = scenario === 'enemy_hp_16' ? 16 :
                                   scenario === 'enemy_hp_50' ? 50 :
-                                  scenario === 'enemy_hp_100' ? 100 : 50;
+                                  scenario === 'enemy_hp_90' ? 90 : 100;
 
                 // 「以下」条件
                 if (mult.condition.includes('以下') && scenarioHp <= mult.hpThreshold) {
@@ -1681,10 +1707,20 @@ export function calculateDamageRange(
     const allResults = [baseResult, ...scenarios.map(s => s.result)];
     const maxResult = allResults.reduce((max, r) => r.dps > max.dps ? r : max, baseResult);
 
+    // シナリオをHP%降順でソート（90% → 50% → 16%）
+    const scenarioOrder: Record<DamageScenario, number> = {
+        'base': 0,
+        'enemy_hp_90': 1,
+        'enemy_hp_50': 2,
+        'enemy_hp_16': 3,
+        'strategy_active': 4,
+        'max_stacks': 5,
+    };
+
     return {
         base: baseResult,
         max: maxResult,
-        scenarios: scenarios.sort((a, b) => b.result.dps - a.result.dps),
+        scenarios: scenarios.sort((a, b) => scenarioOrder[a.scenario] - scenarioOrder[b.scenario]),
         conditionalMultipliers,
     };
 }

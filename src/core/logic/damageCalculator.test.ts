@@ -750,6 +750,37 @@ describe('damageCalculator', () => {
     });
 
     describe('計略ダメージ', () => {
+        test('最大倍率がPhase2のgive_damageに含まれている場合は二重に掛けない', () => {
+            const character = createTestCharacter({
+                strategies: [
+                    {
+                        id: 'hp-dependent-max',
+                        stat: 'give_damage',
+                        mode: 'percent_max',
+                        value: 150, // 2.5倍
+                        source: 'strategy',
+                        target: 'self',
+                        isActive: true,
+                        note: 'HP依存（最大値）',
+                    },
+                ],
+            });
+
+            character.strategyDamage = {
+                multiplier: 2,
+                hits: 5,
+                maxMultiplier: 2.5,
+                defenseIgnore: false,
+                cycleDuration: 10,
+            };
+
+            const result = calculateDamage(character, defaultEnvironment);
+
+            // Phase2で既に2.5倍が適用されているため、計略ダメージ側での最大倍率は追加しない
+            // 1000 × 2.5 × 2 × 5 = 25,000
+            expect(result.strategyDamage).toBe(25000);
+        });
+
         test('計略バフ効果（隙80%短縮、与えるダメージ1.2倍）+ 2.5倍2連撃 + 5回に1回発動', () => {
             const character = createTestCharacter({
                 weapon: '刀',

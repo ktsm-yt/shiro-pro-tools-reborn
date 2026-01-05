@@ -535,10 +535,9 @@ export interface DamageComparison {
  */
 export type DamageScenario =
     | 'base'              // 条件なし
-    | 'enemy_hp_100'      // 敵HP100%
+    | 'enemy_hp_90'       // 敵HP90%
     | 'enemy_hp_50'       // 敵HP50%
-    | 'enemy_hp_30'       // 敵HP30%
-    | 'enemy_hp_1'        // 敵HP1%（最大倍率）
+    | 'enemy_hp_16'       // 敵HP16%（最大倍率）
     | 'strategy_active'   // 計略発動中
     | 'max_stacks';       // 最大スタック時
 

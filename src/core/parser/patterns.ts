@@ -68,6 +68,9 @@ export const patterns: ParsedPattern[] = [
     // Phase 2: give_damage（乗算）- 「与えるダメージ」のみ
     // 注: 「攻撃の○倍のダメージを与え」「○倍のダメージを与える」は瞬間ダメージ（特殊攻撃・計略）であり、
     //     give_damageバフではないので除外する
+    // 「攻撃が○倍のダメージを与え」: 持続バフ（攻撃の→瞬間、攻撃が→持続）
+    // target: 'self' = 計略対象（自身含む）の攻撃ダメージに適用
+    { stat: 'give_damage', mode: 'percent_max', regex: /攻撃が(\d+(?:\.\d+)?)倍のダメージ/, valueTransform: asPercentFromMultiplier, unit: '×', target: 'self', note: '攻撃ダメージ倍率' },
     // 特殊攻撃の与えるダメージ: 「自身の特殊攻撃で与えるダメージが○倍」「特殊攻撃のダメージが○倍」
     { stat: 'give_damage', mode: 'percent_max', regex: /特殊攻撃(?:で|の)(?:与える\s*)?ダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: '特殊攻撃' },
     // 射程条件付き与えるダメージ: 「射程が○以上の場合与えるダメージが○倍」
@@ -80,10 +83,10 @@ export const patterns: ParsedPattern[] = [
     // 注: 「攻撃の○倍のダメージ」は除外するために、直前に「与える」か「与」が必須、または「攻撃の」を否定する
     { stat: 'give_damage', mode: 'percent_max', regex: /(?<!攻撃の)与える\s*ダメージ(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'give_damage', mode: 'percent_max', regex: new RegExp(`(?<!攻撃の)与える\\s*ダメージ(?:が|を)?\\s*(\\d+)${PCT}(?:上昇|増加|アップ)?`) },
-    // HP依存ダメージ: 「敵の耐久が低い程与えるダメージ上昇(最大○倍)」「攻撃対象の耐久が高い程与えるダメージ上昇(最大○倍)」
-    { stat: 'give_damage', mode: 'percent_max', regex: /攻撃速度が高い(?:程|ほど).*?(?:与える\s*)?ダメージ(?:が)?(?:上昇|増加|アップ).*?[（(]?(?:上限|最大)(\d+(?:\.\d+)?)倍[）)]?/, valueTransform: asPercentFromMultiplier, unit: '×', note: '攻撃速度依存（最大値）' },
-    { stat: 'give_damage', mode: 'percent_max', regex: /敵の耐久が低い(?:程|ほど).*?(?:与える\s*)?ダメージ(?:が)?(?:上昇|増加|アップ).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: 'HP依存（最大値）' },
-    { stat: 'give_damage', mode: 'percent_max', regex: /攻撃対象の耐久が高い(?:程|ほど).*?(?:与える\s*)?ダメージ(?:が)?(?:上昇|増加|アップ).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', note: 'HP依存（最大値）' },
+    // 条件依存ダメージ: 攻撃速度依存・HP依存は自身の火力バフ（target: 'self'）
+    { stat: 'give_damage', mode: 'percent_max', regex: /攻撃速度が高い(?:程|ほど).*?(?:与える\s*)?ダメージ(?:が)?(?:上昇|増加|アップ).*?[（(]?(?:上限|最大)(\d+(?:\.\d+)?)倍[）)]?/, valueTransform: asPercentFromMultiplier, unit: '×', target: 'self', note: '攻撃速度依存（最大値）' },
+    { stat: 'give_damage', mode: 'percent_max', regex: /敵の耐久が低い(?:程|ほど).*?(?:与える\s*)?ダメージ(?:が)?(?:上昇|増加|アップ).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', target: 'self', note: 'HP依存（最大値）' },
+    { stat: 'give_damage', mode: 'percent_max', regex: /攻撃対象の耐久が高い(?:程|ほど).*?(?:与える\s*)?ダメージ(?:が)?(?:上昇|増加|アップ).*?最大(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×', target: 'self', note: 'HP依存（最大値）' },
     // Phase 4: damage_dealt（加算）- 「与ダメ」（略称）
     { stat: 'damage_dealt', mode: 'percent_max', regex: /(?<!与)与ダメ(?:ージ)?(?:が|を)?\s*(\d+(?:\.\d+)?)倍/, valueTransform: asPercentFromMultiplier, unit: '×' },
     { stat: 'damage_dealt', mode: 'percent_max', regex: new RegExp(`(?<!与)与ダメ(?:ージ)?(?:が|を)?\\s*(\\d+)${PCT}(?!低下|減少|ダウン)`) },
