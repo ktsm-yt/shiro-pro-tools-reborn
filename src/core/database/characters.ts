@@ -28,23 +28,20 @@ export async function upsertCharacter(char: Character, wikiUrl?: string): Promis
 
     const characterId = data.id;
 
-    // バフを全置換
+    // バフを全置換（RPC でトランザクション化）
     const allBuffs: Buff[] = [
         ...char.skills.map(b => ({ ...b, buffGroup: 'skills' as const })),
         ...char.strategies.map(b => ({ ...b, buffGroup: 'strategies' as const })),
         ...(char.specialAbilities ?? []).map(b => ({ ...b, buffGroup: 'specialAbilities' as const })),
     ];
 
-    // 既存バフ削除
-    await supabase.from('buffs').delete().eq('character_id', characterId);
-
-    // 新規バフ挿入
-    if (allBuffs.length > 0) {
-        const buffRows = allBuffs.map(b => buffToDbRow(b, characterId));
-        const { error: buffError } = await supabase.from('buffs').insert(buffRows);
-        if (buffError) {
-            console.error('Failed to insert buffs:', buffError.message);
-        }
+    const buffRows = allBuffs.map(b => buffToDbRow(b, characterId));
+    const { error: rpcError } = await supabase.rpc('replace_buffs', {
+        p_character_id: characterId,
+        p_buffs: buffRows,
+    });
+    if (rpcError) {
+        console.error('Failed to replace buffs:', rpcError.message);
     }
 
     return characterId;

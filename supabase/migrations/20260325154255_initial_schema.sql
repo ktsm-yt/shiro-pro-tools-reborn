@@ -106,15 +106,15 @@ ALTER TABLE user_characters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE formations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 
--- characters/buffs は全員読み取り可、認証ユーザーのみ書き込み可
+-- characters/buffs は全員読み取り可、認証ユーザーのみ挿入可
+-- update/deleteはRPC (SECURITY DEFINER) 経由のみ許可
 CREATE POLICY "characters_read" ON characters FOR SELECT USING (true);
 CREATE POLICY "characters_insert" ON characters FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "characters_update" ON characters FOR UPDATE USING (auth.uid() IS NOT NULL);
 
 CREATE POLICY "buffs_read" ON buffs FOR SELECT USING (true);
 CREATE POLICY "buffs_insert" ON buffs FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "buffs_update" ON buffs FOR UPDATE USING (auth.uid() IS NOT NULL);
-CREATE POLICY "buffs_delete" ON buffs FOR DELETE USING (auth.uid() IS NOT NULL);
+-- buffs のdelete/updateはreplace_buffs RPC (SECURITY DEFINER) から実行
 
 -- 個人データは本人のみ
 CREATE POLICY "user_characters_own" ON user_characters FOR ALL USING (auth.uid() = user_id);
