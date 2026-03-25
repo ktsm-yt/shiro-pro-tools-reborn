@@ -4,6 +4,7 @@ import { parseWikiHtml } from '../../core/wiki/parser';
 import { analyzeCharacter } from '../../core/wiki/analyzer';
 import type { Character, Buff } from '../../core/types';
 import { BuffEditor } from './BuffEditor';
+import { upsertCharacter } from '../../core/database/characters';
 
 interface Props {
     isOpen: boolean;
@@ -147,15 +148,19 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     };
 
     const handleRegister = () => {
-        const selectedCharacters = parseResults
-            .filter(r => r.selected && r.character)
-            .map(r => r.character!);
+        const selectedEntries = parseResults
+            .filter(r => r.selected && r.character);
 
-        if (selectedCharacters.length === 0) return;
+        if (selectedEntries.length === 0) return;
 
-        // 選択されたキャラクターを順次登録
-        selectedCharacters.forEach(character => {
-            onCharacterImported(character);
+        // 選択されたキャラクターを順次登録（localStorage即時）
+        selectedEntries.forEach(entry => {
+            onCharacterImported(entry.character!);
+            // バックグラウンドでSupabaseに同期
+            const wikiUrl = entry.url !== 'direct-input' ? entry.url : undefined;
+            upsertCharacter(entry.character!, wikiUrl).catch(err =>
+                console.warn('Cloud sync failed:', err)
+            );
         });
         handleClose();
     };

@@ -17,6 +17,7 @@ import { useFormationStorage } from './ui/hooks/useFormationStorage';
 import { useCompareList } from './ui/hooks/useCompareList';
 import { getAttributeMeta, isRangedWeapon } from './ui/constants/meta';
 import { loadCharacters } from './core/storage';
+import { useAuth } from './ui/hooks/useAuth';
 import { FormationSaveModal } from './ui/components/FormationSaveModal';
 import { ConfirmModal } from './ui/components/ConfirmModal';
 import { checkMapConstraints, type MapConstraints } from './core/logic/mapConstraints';
@@ -29,6 +30,9 @@ type ActiveTab = 'matrix' | 'analysis';
 const SESSION_KEY = 'shiropro_reborn_session';
 
 export default function App() {
+  // --- Auth (fire-and-forget, no blocking UI) ---
+  useAuth();
+
   // --- State ---
   const [formation, setFormation] = useState<Formation>({ slots: Array(8).fill(null) });
   const [activeTab, setActiveTab] = useState<ActiveTab>('matrix');
