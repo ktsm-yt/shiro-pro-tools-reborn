@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { fetchWikiPage, parseDirectHtml } from '../../core/wiki/fetcher';
 import { parseWikiHtml } from '../../core/wiki/parser';
 import { analyzeCharacter } from '../../core/wiki/analyzer';
-import type { Character } from '../../core/types';
+import type { Character, Buff } from '../../core/types';
+import { BuffEditor } from './BuffEditor';
+import { upsertCharacter } from '../../core/database/characters';
 
 interface Props {
     isOpen: boolean;
@@ -27,7 +29,6 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     const [error, setError] = useState<string | null>(null);
     const [parseResults, setParseResults] = useState<ParseResult[]>([]);
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-    const [showDebug, setShowDebug] = useState(false);
     const manualAttributeOptions = ['平', '山', '水', '平山', '地獄', '架空', '無属性'];
 
     const handleClose = () => {
@@ -50,13 +51,10 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
         return () => window.removeEventListener('keydown', listener);
     }, [isOpen]);
 
-    const toggleBuff = (resultIndex: number, kind: 'skills' | 'strategies', id: string) => {
+    const updateBuffs = (resultIndex: number, kind: 'skills' | 'strategies' | 'specialAbilities', buffs: Buff[]) => {
         setParseResults(prev => prev.map((result, i) => {
             if (i !== resultIndex || !result.character) return result;
-            const cloned = { ...result.character } as Character;
-            const list = cloned[kind] || [];
-            cloned[kind] = list.map(b => b.id === id ? { ...b, isActive: !b.isActive } : b) as any;
-            return { ...result, character: cloned };
+            return { ...result, character: { ...result.character, [kind]: buffs } };
         }));
     };
 
@@ -150,15 +148,19 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
     };
 
     const handleRegister = () => {
-        const selectedCharacters = parseResults
-            .filter(r => r.selected && r.character)
-            .map(r => r.character!);
+        const selectedEntries = parseResults
+            .filter(r => r.selected && r.character);
 
-        if (selectedCharacters.length === 0) return;
+        if (selectedEntries.length === 0) return;
 
-        // 選択されたキャラクターを順次登録
-        selectedCharacters.forEach(character => {
-            onCharacterImported(character);
+        // 選択されたキャラクターを順次登録（localStorage即時）
+        selectedEntries.forEach(entry => {
+            onCharacterImported(entry.character!);
+            // バックグラウンドでSupabaseに同期
+            const wikiUrl = entry.url !== 'direct-input' ? entry.url : undefined;
+            upsertCharacter(entry.character!, wikiUrl).catch(err =>
+                console.warn('Cloud sync failed:', err)
+            );
         });
         handleClose();
     };
@@ -269,14 +271,6 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                             ({successCount}件成功 / {parseResults.length}件中)
                                         </span>
                                     </h3>
-                                    <label className="flex items-center gap-2 text-sm text-gray-400">
-                                        <input
-                                            type="checkbox"
-                                            checked={showDebug}
-                                            onChange={(e) => setShowDebug(e.target.checked)}
-                                        />
-                                        デバッグ表示
-                                    </label>
                                 </div>
 
                                 {/* キャラクター一覧 */}
@@ -383,65 +377,29 @@ export const WikiImporter: React.FC<Props> = ({ isOpen, onClose, onCharacterImpo
                                                         </div>
                                                     </details>
 
-                                                    {/* デバッグ情報 */}
-                                                    {showDebug && (
-                                                        <div className="bg-[#0b101b] border border-[#1f2a3d] rounded p-3 text-xs space-y-2">
-                                                            <div>
-                                                                <strong className="text-gray-300">特技テキスト:</strong>
-                                                                <ul className="list-disc list-inside text-gray-400 mt-1">
-                                                                    {(result.character.rawSkillTexts ?? []).map((t, i) => (
-                                                                        <li key={i}>{t}</li>
-                                                                    ))}
-                                                                    {(result.character.rawSkillTexts ?? []).length === 0 && <li>なし</li>}
-                                                                </ul>
-                                                            </div>
-                                                            <div>
-                                                                <strong className="text-gray-300">計略テキスト:</strong>
-                                                                <ul className="list-disc list-inside text-gray-400 mt-1">
-                                                                    {(result.character.rawStrategyTexts ?? []).map((t, i) => (
-                                                                        <li key={i}>{t}</li>
-                                                                    ))}
-                                                                    {(result.character.rawStrategyTexts ?? []).length === 0 && <li>なし</li>}
-                                                                </ul>
-                                                            </div>
-                                                            <div>
-                                                                <strong className="text-gray-300">解析済みバフ:</strong>
-                                                                <div className="overflow-x-auto mt-1">
-                                                                    <table className="min-w-full border border-[#1f2a3d]">
-                                                                        <thead className="bg-[#111a2d]">
-                                                                            <tr>
-                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">種別</th>
-                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">stat</th>
-                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">mode</th>
-                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">value</th>
-                                                                                <th className="px-2 py-1 border border-[#1f2a3d]">target</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            {result.character.skills.map((b, i) => (
-                                                                                <tr key={`s-${i}`} className="border-t border-[#1f2a3d]">
-                                                                                    <td className="px-2 py-1">特技</td>
-                                                                                    <td className="px-2 py-1">{b.stat}</td>
-                                                                                    <td className="px-2 py-1">{b.mode}</td>
-                                                                                    <td className="px-2 py-1">{b.value}</td>
-                                                                                    <td className="px-2 py-1">{b.target}</td>
-                                                                                </tr>
-                                                                            ))}
-                                                                            {result.character.strategies.map((b, i) => (
-                                                                                <tr key={`st-${i}`} className="border-t border-[#1f2a3d]">
-                                                                                    <td className="px-2 py-1">計略</td>
-                                                                                    <td className="px-2 py-1">{b.stat}</td>
-                                                                                    <td className="px-2 py-1">{b.mode}</td>
-                                                                                    <td className="px-2 py-1">{b.value}</td>
-                                                                                    <td className="px-2 py-1">{b.target}</td>
-                                                                                </tr>
-                                                                            ))}
-                                                                        </tbody>
-                                                                    </table>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                                    {/* バフ編集 */}
+                                                    <div className="space-y-4">
+                                                        <BuffEditor
+                                                            buffs={result.character.skills}
+                                                            groupLabel="特技"
+                                                            onChange={(buffs) => updateBuffs(idx, 'skills', buffs)}
+                                                            rawTexts={result.character.rawSkillTexts}
+                                                        />
+                                                        <BuffEditor
+                                                            buffs={result.character.strategies}
+                                                            groupLabel="計略"
+                                                            onChange={(buffs) => updateBuffs(idx, 'strategies', buffs)}
+                                                            rawTexts={result.character.rawStrategyTexts}
+                                                        />
+                                                        {((result.character.specialAbilities ?? []).length > 0 || (result.character.rawSpecialTexts ?? []).length > 0) && (
+                                                            <BuffEditor
+                                                                buffs={result.character.specialAbilities ?? []}
+                                                                groupLabel="特殊能力"
+                                                                onChange={(buffs) => updateBuffs(idx, 'specialAbilities', buffs)}
+                                                                rawTexts={result.character.rawSpecialTexts}
+                                                            />
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

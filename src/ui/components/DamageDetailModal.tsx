@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Character, DamageCalculationResult, EnvironmentSettings, DamageBreakdown, Buff, DamageRange } from '../../core/types';
 import { calculateDamage, calculateDamageRange } from '../../core/logic/damageCalculator';
+import { BuffEditor } from './BuffEditor';
 
 interface DamageDetailModalProps {
     character: Character;
@@ -371,6 +372,8 @@ function PhaseDetail({
 }
 
 export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharacter }: DamageDetailModalProps) {
+    // メインタブ状態（ダメージ計算 / バフ編集）
+    const [mainTab, setMainTab] = useState<'damage' | 'buffs'>('damage');
     // モバイル用タブ状態
     const [mobileTab, setMobileTab] = useState<'summary' | 'detail'>('summary');
 
@@ -833,12 +836,37 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                             <div className="text-xs text-gray-400">{character.weapon}</div>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition-colors"
-                    >
-                        ✕
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* メインタブ切替 */}
+                        <div className="flex bg-gray-800 rounded-lg p-0.5 mr-2">
+                            <button
+                                onClick={() => setMainTab('damage')}
+                                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                    mainTab === 'damage'
+                                        ? 'bg-gray-600 text-white'
+                                        : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                            >
+                                ダメージ
+                            </button>
+                            <button
+                                onClick={() => setMainTab('buffs')}
+                                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                    mainTab === 'buffs'
+                                        ? 'bg-gray-600 text-white'
+                                        : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                            >
+                                バフ編集
+                            </button>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition-colors"
+                        >
+                            ✕
+                        </button>
+                    </div>
                 </div>
 
                 {/* モバイル用タブ */}
@@ -865,31 +893,64 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                     </button>
                 </div>
 
-                {/* PC: 3カラムレイアウト / モバイル: タブ切替 */}
-                <div className="flex-1 min-h-0 flex flex-col">
-                    {/* PC用3カラム（均等幅） */}
-                    <div className="hidden md:flex flex-1 min-h-0">
-                        {/* カラム1: 基礎情報 */}
-                        <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
-                            {BasicInfoColumn}
-                        </div>
-                        {/* カラム2: 特殊ダメージ */}
-                        <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
-                            {SpecialDamageColumn}
-                        </div>
-                        {/* カラム3: Phase詳細 */}
-                        <div className="w-1/3 min-h-0 overflow-y-auto p-3 custom-scrollbar">
-                            <div className="text-xs uppercase tracking-wider text-gray-500 mb-2 font-medium">
-                                Phase詳細
+                {/* メインコンテンツ — ダメージタブが常に高さを決定、バフ編集はその上にオーバーレイ */}
+                <div className="flex-1 min-h-0 relative">
+                    {/* ダメージタブ（常にレンダリングして高さの基準にする） */}
+                    <div className={`flex flex-col h-full ${mainTab === 'damage' ? '' : 'invisible'}`}>
+                        {/* PC用3カラム（均等幅） */}
+                        <div className="hidden md:flex flex-1 min-h-0">
+                            {/* カラム1: 基礎情報 */}
+                            <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
+                                {BasicInfoColumn}
                             </div>
-                            {DetailContent}
+                            {/* カラム2: 特殊ダメージ */}
+                            <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
+                                {SpecialDamageColumn}
+                            </div>
+                            {/* カラム3: Phase詳細 */}
+                            <div className="w-1/3 min-h-0 overflow-y-auto p-3 custom-scrollbar">
+                                <div className="text-xs uppercase tracking-wider text-gray-500 mb-2 font-medium">
+                                    Phase詳細
+                                </div>
+                                {DetailContent}
+                            </div>
+                        </div>
+
+                        {/* モバイル用タブコンテンツ */}
+                        <div className="md:hidden flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar">
+                            {mobileTab === 'summary' ? SummaryContent : DetailContent}
                         </div>
                     </div>
 
-                    {/* モバイル用タブコンテンツ */}
-                    <div className="md:hidden flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar">
-                        {mobileTab === 'summary' ? SummaryContent : DetailContent}
-                    </div>
+                    {/* バフ編集タブ（absolute でダメージタブと同じ領域を使用） */}
+                    {mainTab === 'buffs' && (
+                        <div className="absolute inset-0 overflow-y-auto p-4 custom-scrollbar bg-[#131b2b]">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <BuffEditor
+                                    buffs={character.skills}
+                                    groupLabel="特技"
+                                    onChange={(buffs) => onUpdateCharacter?.({ ...character, skills: buffs })}
+                                    rawTexts={character.rawSkillTexts}
+                                />
+                                <BuffEditor
+                                    buffs={character.strategies}
+                                    groupLabel="計略"
+                                    onChange={(buffs) => onUpdateCharacter?.({ ...character, strategies: buffs })}
+                                    rawTexts={character.rawStrategyTexts}
+                                />
+                            </div>
+                            {((character.specialAbilities ?? []).length > 0 || (character.rawSpecialTexts ?? []).length > 0) && (
+                                <div className="mt-4">
+                                    <BuffEditor
+                                        buffs={character.specialAbilities ?? []}
+                                        groupLabel="特殊能力"
+                                        onChange={(buffs) => onUpdateCharacter?.({ ...character, specialAbilities: buffs })}
+                                        rawTexts={character.rawSpecialTexts}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

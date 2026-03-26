@@ -1,0 +1,143 @@
+import type { Stat, BuffMode, Target, ConditionTag, DynamicBuffType } from '../../core/types';
+
+export const STAT_LABELS: Record<Stat, string> = {
+    attack: '攻撃',
+    defense: '防御',
+    range: '射程',
+    attack_speed: '攻撃速度',
+    attack_gap: '攻撃後の隙',
+    recovery: '回復',
+    cost: '気',
+    cost_gradual: '徐々気',
+    cost_giant: '巨大化消費気',
+    cost_strategy: '計略消費気',
+    cost_enemy_defeat: '気牛',
+    cost_defeat_bonus: '気ノビ',
+    strategy_cooldown: '計略CT',
+    target_count: '同時攻撃数',
+    attack_count: '攻撃回数',
+    damage_dealt: '与ダメ',
+    give_damage: '与えるダメージ',
+    damage_taken: '被ダメ',
+    damage_recovery: 'ダメージ回復',
+    critical_bonus: 'クリティカル',
+    effect_duplicate_attack: '攻撃効果重複',
+    effect_duplicate_defense: '防御効果重複',
+    effect_duplicate_range: '射程効果重複',
+    enemy_attack: '敵攻撃',
+    enemy_defense: '敵防御',
+    enemy_defense_ignore_percent: '防御無視(%)',
+    enemy_defense_ignore_complete: '防御無視(完全)',
+    enemy_movement: '敵移動速度',
+    enemy_retreat: '敵後退',
+    enemy_knockback: '敵ノックバック',
+    enemy_range: '敵射程',
+    enemy_damage_dealt: '敵与ダメ低下',
+    enemy_damage_taken: '敵被ダメ上昇',
+    inspire: '鼓舞',
+    skill_multiplier: 'スキル倍率',
+    hp: 'HP',
+    cooldown: 'CT',
+    movement_speed: '移動速度',
+    retreat: '後退',
+    ki_gain: '気増加',
+    damage_drain: 'ダメージ吸収',
+    ignore_defense: '防御無視',
+};
+
+export const BUFF_MODE_LABELS: Record<BuffMode, string> = {
+    percent_max: '% (最大値)',
+    flat_sum: '固定値 (加算)',
+    percent_reduction: '% (短縮)',
+    absolute_set: '絶対値',
+};
+
+export const TARGET_LABELS: Record<Target, string> = {
+    self: '自身',
+    ally: '味方',
+    range: '射程内',
+    all: '全体',
+    field: 'フィールド',
+    out_of_range: '射程外',
+};
+
+export const CONDITION_TAG_LABELS: Record<ConditionTag, string> = {
+    melee: '近接',
+    ranged: '遠隔',
+    physical: '物理',
+    magical: '術',
+    hp_above_50: 'HP50%以上',
+    hp_below_50: 'HP50%以下',
+    hp_above_70: 'HP70%以上',
+    hp_below_30: 'HP30%以下',
+    hp_full: 'HP満タン',
+    giant_1_plus: '巨大化1以上',
+    giant_2_plus: '巨大化2以上',
+    giant_3_plus: '巨大化3以上',
+    giant_4_plus: '巨大化4以上',
+    giant_5: '巨大化5',
+    water: '水',
+    plain: '平',
+    mountain: '山',
+    plain_mountain: '平山',
+    hell: '地獄',
+    fictional: '架空',
+    summer: '夏',
+    kenran: '絢爛',
+    halloween: 'ハロウィン',
+    school: '学園',
+    christmas: '聖夜',
+    new_year: '正月',
+    moon_viewing: 'お月見',
+    bride: '花嫁',
+    castle_girl: '城娘',
+    ambush: '伏兵',
+    lord: '殿',
+    flying_enemy: '飛行敵',
+    ground_enemy: '地上敵',
+    boss_enemy: 'ボス',
+    same_weapon: '同武器',
+    different_weapon: '異武器',
+    night_battle: '夜戦',
+    continuous_deploy: '連続配置',
+    on_water: '水上',
+    exclude_self: '自身除く',
+    hp_dependent: 'HP依存',
+    on_placement: '配置中',
+};
+
+export const DYNAMIC_TYPE_LABELS: Record<DynamicBuffType, string> = {
+    per_enemy_in_range: '射程内敵数',
+    per_ally_in_range: '射程内味方数',
+    per_ally_other: '他の味方数',
+    per_ambush_deployed: '伏兵配置数',
+    per_enemy_defeated: '敵撃破数',
+    per_specific_attribute: '特定属性数',
+    per_specific_weapon: '特定武器数',
+};
+
+export const CONFIDENCE_LABELS: Record<string, { label: string; color: string }> = {
+    certain: { label: '確定', color: 'text-green-400' },
+    inferred: { label: '推定', color: 'text-yellow-400' },
+    uncertain: { label: '不確実', color: 'text-red-400' },
+};
+
+// Stat options grouped by category for the editor UI
+export const STAT_GROUPS: { label: string; stats: Stat[] }[] = [
+    {
+        label: '味方バフ',
+        stats: ['attack', 'defense', 'range', 'attack_speed', 'attack_gap', 'recovery', 'cost', 'cost_gradual', 'cost_giant', 'cost_strategy', 'cost_enemy_defeat', 'cost_defeat_bonus', 'strategy_cooldown', 'target_count', 'attack_count'],
+    },
+    {
+        label: 'ダメージ倍率',
+        stats: ['damage_dealt', 'give_damage', 'damage_taken', 'damage_recovery', 'critical_bonus', 'effect_duplicate_attack', 'effect_duplicate_defense', 'effect_duplicate_range'],
+    },
+    {
+        label: '敵デバフ',
+        stats: ['enemy_attack', 'enemy_defense', 'enemy_defense_ignore_percent', 'enemy_defense_ignore_complete', 'enemy_movement', 'enemy_retreat', 'enemy_knockback', 'enemy_range', 'enemy_damage_dealt', 'enemy_damage_taken'],
+    },
+    {
+        label: '特殊',
+        stats: ['inspire', 'skill_multiplier', 'hp', 'cooldown', 'movement_speed', 'retreat', 'ki_gain', 'damage_drain', 'ignore_defense'],
+    },
+];

@@ -31,6 +31,7 @@ export function convertToRebornBuff(parsed: ParsedBuff): Omit<Buff, 'id' | 'sour
         inferenceReason: parsed.inferenceReason,
         note: parsed.note,
         conditionTags: parsed.conditionTags,
+        rawText: parsed.rawText,
     };
 
     // 気バフは常にfield

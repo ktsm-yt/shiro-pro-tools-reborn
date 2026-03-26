@@ -163,6 +163,8 @@ export interface Buff {
     note?: string;              // 補足情報
     name?: string;              // 表示名 (UI用)
     description?: string;       // 説明文 (UI用)
+    rawText?: string;           // 元のWikiテキスト
+    buffGroup?: 'skills' | 'strategies' | 'specialAbilities'; // バフグループ
 }
 
 export interface Character {
