@@ -893,56 +893,61 @@ export function DamageDetailModal({ character, baseEnv, onClose, onUpdateCharact
                     </button>
                 </div>
 
-                {/* メインコンテンツ */}
-                <div className="flex-1 min-h-0 flex flex-col">
-                    {mainTab === 'damage' ? (
-                        <>
-                            {/* PC用3カラム（均等幅） */}
-                            <div className="hidden md:flex flex-1 min-h-0">
-                                {/* カラム1: 基礎情報 */}
-                                <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
-                                    {BasicInfoColumn}
-                                </div>
-                                {/* カラム2: 特殊ダメージ */}
-                                <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
-                                    {SpecialDamageColumn}
-                                </div>
-                                {/* カラム3: Phase詳細 */}
-                                <div className="w-1/3 min-h-0 overflow-y-auto p-3 custom-scrollbar">
-                                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-2 font-medium">
-                                        Phase詳細
-                                    </div>
-                                    {DetailContent}
-                                </div>
+                {/* メインコンテンツ — ダメージタブが常に高さを決定、バフ編集はその上にオーバーレイ */}
+                <div className="flex-1 min-h-0 relative">
+                    {/* ダメージタブ（常にレンダリングして高さの基準にする） */}
+                    <div className={`flex flex-col h-full ${mainTab === 'damage' ? '' : 'invisible'}`}>
+                        {/* PC用3カラム（均等幅） */}
+                        <div className="hidden md:flex flex-1 min-h-0">
+                            {/* カラム1: 基礎情報 */}
+                            <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
+                                {BasicInfoColumn}
                             </div>
+                            {/* カラム2: 特殊ダメージ */}
+                            <div className="w-1/3 min-h-0 overflow-y-auto p-3 border-r border-gray-700 custom-scrollbar">
+                                {SpecialDamageColumn}
+                            </div>
+                            {/* カラム3: Phase詳細 */}
+                            <div className="w-1/3 min-h-0 overflow-y-auto p-3 custom-scrollbar">
+                                <div className="text-xs uppercase tracking-wider text-gray-500 mb-2 font-medium">
+                                    Phase詳細
+                                </div>
+                                {DetailContent}
+                            </div>
+                        </div>
 
-                            {/* モバイル用タブコンテンツ */}
-                            <div className="md:hidden flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar">
-                                {mobileTab === 'summary' ? SummaryContent : DetailContent}
-                            </div>
-                        </>
-                    ) : (
-                        /* バフ編集タブ */
-                        <div className="flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar space-y-4">
-                            <BuffEditor
-                                buffs={character.skills}
-                                groupLabel="特技"
-                                onChange={(buffs) => onUpdateCharacter?.({ ...character, skills: buffs })}
-                                rawTexts={character.rawSkillTexts}
-                            />
-                            <BuffEditor
-                                buffs={character.strategies}
-                                groupLabel="計略"
-                                onChange={(buffs) => onUpdateCharacter?.({ ...character, strategies: buffs })}
-                                rawTexts={character.rawStrategyTexts}
-                            />
-                            {((character.specialAbilities ?? []).length > 0 || (character.rawSpecialTexts ?? []).length > 0) && (
+                        {/* モバイル用タブコンテンツ */}
+                        <div className="md:hidden flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar">
+                            {mobileTab === 'summary' ? SummaryContent : DetailContent}
+                        </div>
+                    </div>
+
+                    {/* バフ編集タブ（absolute でダメージタブと同じ領域を使用） */}
+                    {mainTab === 'buffs' && (
+                        <div className="absolute inset-0 overflow-y-auto p-4 custom-scrollbar bg-[#131b2b]">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <BuffEditor
-                                    buffs={character.specialAbilities ?? []}
-                                    groupLabel="特殊能力"
-                                    onChange={(buffs) => onUpdateCharacter?.({ ...character, specialAbilities: buffs })}
-                                    rawTexts={character.rawSpecialTexts}
+                                    buffs={character.skills}
+                                    groupLabel="特技"
+                                    onChange={(buffs) => onUpdateCharacter?.({ ...character, skills: buffs })}
+                                    rawTexts={character.rawSkillTexts}
                                 />
+                                <BuffEditor
+                                    buffs={character.strategies}
+                                    groupLabel="計略"
+                                    onChange={(buffs) => onUpdateCharacter?.({ ...character, strategies: buffs })}
+                                    rawTexts={character.rawStrategyTexts}
+                                />
+                            </div>
+                            {((character.specialAbilities ?? []).length > 0 || (character.rawSpecialTexts ?? []).length > 0) && (
+                                <div className="mt-4">
+                                    <BuffEditor
+                                        buffs={character.specialAbilities ?? []}
+                                        groupLabel="特殊能力"
+                                        onChange={(buffs) => onUpdateCharacter?.({ ...character, specialAbilities: buffs })}
+                                        rawTexts={character.rawSpecialTexts}
+                                    />
+                                </div>
                             )}
                         </div>
                     )}
